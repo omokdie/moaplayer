@@ -32,10 +32,12 @@ try {
   Get-ChildItem -Path $bin -File | Where-Object { $_.Name -ne 'ffplay.exe' } | Copy-Item -Destination $dest
   $license = Join-Path (Split-Path -Parent $bin) 'LICENSE.txt'
   if (Test-Path $license) { Copy-Item $license (Join-Path $dest 'LICENSE.txt') }
-  & (Join-Path $dest 'ffmpeg.exe') -hide_banner -version | Select-Object -First 1
-  if ($LASTEXITCODE -ne 0) { throw 'ffmpeg.exe does not run' }
-  & (Join-Path $dest 'ffprobe.exe') -hide_banner -version | Select-Object -First 1
-  if ($LASTEXITCODE -ne 0) { throw 'ffprobe.exe does not run' }
+  # capture the whole output first: Select-Object -First would stop (kill) the process early
+  foreach ($tool in 'ffmpeg.exe', 'ffprobe.exe') {
+    $out = & (Join-Path $dest $tool) -hide_banner -version
+    if ($LASTEXITCODE -ne 0) { throw "$tool does not run (exit $LASTEXITCODE)" }
+    Write-Host ($out | Select-Object -First 1)
+  }
   $mb = [math]::Round(((Get-ChildItem $dest | Measure-Object -Property Length -Sum).Sum / 1MB), 1)
   Write-Host "FFmpeg ready in $dest ($mb MB)"
 }
