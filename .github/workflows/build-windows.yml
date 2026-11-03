@@ -1,0 +1,97 @@
+name: Build Windows installer
+
+# Builds pc/dist/MoaPlayer-Setup-<ver>.exe (+ latest.yml, .blockmap) with FFmpeg inside.
+# Called from release.yml with a tag, the files are attached to that GitHub Release, which is the
+# electron-updater feed of installed copies.  Manual runs only produce workflow artifacts.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to attach the files to (empty = artifacts only)'
+        type: string
+        required: false
+        default: ''
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: pc
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Download FFmpeg (SW decoder, thumbnails, embedded subtitles)
+        shell: pwsh
+        run: ./scripts/fetch-ffmpeg.ps1
+
+      - name: Sync version from version.json
+        run: npm run sync-version
+
+      - name: Code-signing certificate (optional secrets CSC_LINK / CSC_KEY_PASSWORD)
+        run: |
+          if [ -n "${CSC_LINK_SECRET}" ]; then
+            echo "CSC_LINK=${CSC_LINK_SECRET}" >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=${CSC_KEY_PASSWORD_SECRET}" >> "$GITHUB_ENV"
+            echo "Code signing: enabled"
+          else
+            echo "Code signing: not configured (unsigned exe → SmartScreen warning on first run)"
+          fi
+        env:
+          CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      # electron-builder writes latest.yml (+ .blockmap) because build.publish is configured; the upload
+      # itself is done with action-gh-release below so re-runs are idempotent.
+      - name: Build installer
+        run: npm run dist:win
+
+      - name: Check the packaged app
+        run: |
+          set -euo pipefail
+          ls -la dist
+          R=dist/win-unpacked/resources
+          test -f "$R/app.asar" || { echo "::error::app.asar missing"; exit 1; }
+          test -f "$R/app-update.yml" || { echo "::error::app-update.yml missing (auto-update would not work)"; exit 1; }
+          test -f "$R/ffmpeg/ffmpeg.exe" && test -f "$R/ffmpeg/ffprobe.exe" || { echo "::error::FFmpeg missing in resources/ffmpeg"; exit 1; }
+          cat "$R/app-update.yml"
+          "$R/ffmpeg/ffprobe.exe" -hide_banner -version > ffprobe-version.txt
+          head -n 1 ffprobe-version.txt
+          du -sh "$R/ffmpeg" dist/*.exe
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: MoaPlayer-windows
+          path: |
+            pc/dist/*.exe
+            pc/dist/*.blockmap
+            pc/dist/latest.yml
+          if-no-files-found: error
+
+      - name: Attach installer + update feed to the GitHub Release
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          files: |
+            pc/dist/MoaPlayer-Setup-*.exe
+            pc/dist/MoaPlayer-Setup-*.exe.blockmap
+            pc/dist/latest.yml
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

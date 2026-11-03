@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="decoder_entries"><item>HW 디코더 (하드웨어 가속)</item><item>SW 디코더 (소프트웨어)</item></string-array>
+    <string-array name="decoder_values"><item>hw</item><item>sw</item></string-array>
+    <string-array name="resume_entries"><item>매번 묻기</item><item>항상 이어보기</item><item>처음부터 재생</item></string-array>
+    <string-array name="resume_values"><item>ask</item><item>always</item><item>never</item></string-array>
+    <string-array name="orient_entries"><item>동영상 비율에 맞춤</item><item>가로 고정</item><item>세로 고정</item><item>자동 회전(센서)</item></string-array>
+    <string-array name="orient_values"><item>video</item><item>landscape</item><item>portrait</item><item>sensor</item></string-array>
+    <string-array name="doubletap_entries"><item>좌/우: 탐색, 가운데: 재생/일시정지</item><item>재생/일시정지만</item><item>사용 안 함</item></string-array>
+    <string-array name="doubletap_values"><item>seek</item><item>play_pause</item><item>off</item></string-array>
+    <string-array name="seeksec_entries"><item>5초</item><item>10초</item><item>15초</item><item>20초</item><item>30초</item><item>60초</item></string-array>
+    <string-array name="seeksec_values"><item>5</item><item>10</item><item>15</item><item>20</item><item>30</item><item>60</item></string-array>
+    <string-array name="subsize_entries"><item>아주 작게 (60%)</item><item>작게 (80%)</item><item>보통 (100%)</item><item>크게 (125%)</item><item>더 크게 (150%)</item><item>아주 크게 (200%)</item></string-array>
+    <string-array name="subsize_values"><item>60</item><item>80</item><item>100</item><item>125</item><item>150</item><item>200</item></string-array>
+    <string-array name="subcolor_entries"><item>흰색</item><item>노란색</item><item>하늘색</item><item>연두색</item></string-array>
+    <string-array name="subcolor_values"><item>#FFFFFFFF</item><item>#FFFFEB3B</item><item>#FF80DEEA</item><item>#FFB2FF59</item></string-array>
+    <string-array name="subbottom_entries"><item>아래 끝 (2%)</item><item>기본 (6%)</item><item>조금 위 (12%)</item><item>위 (20%)</item></string-array>
+    <string-array name="subbottom_values"><item>2</item><item>6</item><item>12</item><item>20</item></string-array>
+    <string-array name="subenc_entries"><item>자동 감지 (UTF-8 / EUC-KR)</item><item>UTF-8</item><item>EUC-KR (CP949)</item><item>UTF-16</item><item>Shift_JIS</item><item>GBK</item></string-array>
+    <string-array name="subenc_values"><item>auto</item><item>UTF-8</item><item>MS949</item><item>UTF-16</item><item>Shift_JIS</item><item>GBK</item></string-array>
+    <string-array name="sort_entries"><item>이름</item><item>날짜</item><item>크기</item><item>재생 시간</item></string-array>
+    <string-array name="sort_values"><item>name</item><item>date</item><item>size</item><item>duration</item></string-array>
+    <string-array name="view_entries"><item>목록</item><item>격자</item></string-array>
+    <string-array name="view_values"><item>list</item><item>grid</item></string-array>
+</resources>

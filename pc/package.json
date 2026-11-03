@@ -1,0 +1,128 @@
+{
+  "name": "moaplayer",
+  "productName": "MoaPlayer",
+  "version": "1.1.0",
+  "description": "모아 플레이어 - MX Player 방식의 PC 동영상 플레이어",
+  "main": "main.js",
+  "homepage": "https://github.com/omokdie/moaplayer",
+  "author": {
+    "name": "Moa Player"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "sync-version": "node scripts/sync-version.mjs",
+    "fetch-ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
+    "pack": "npm run sync-version && electron-builder --win nsis --x64 --dir",
+    "dist:win": "npm run sync-version && electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-log": "^5.2.0",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.moa.player",
+    "productName": "MoaPlayer",
+    "copyright": "Copyright © 2026 Moa Player",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "ffmpeg",
+        "to": "ffmpeg",
+        "filter": [
+          "**/*",
+          "!ffplay.exe"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "MoaPlayer-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "모아 플레이어",
+      "uninstallDisplayName": "모아 플레이어",
+      "installerLanguages": [
+        "ko_KR",
+        "en_US"
+      ],
+      "language": "1042",
+      "artifactName": "MoaPlayer-Setup-${version}.${ext}",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp4",
+          "m4v",
+          "mkv",
+          "avi",
+          "mov",
+          "wmv",
+          "flv",
+          "webm",
+          "m2ts",
+          "mts",
+          "mpg",
+          "mpeg",
+          "vob",
+          "3gp",
+          "3g2",
+          "ogv",
+          "rm",
+          "rmvb",
+          "asf",
+          "divx",
+          "f4v",
+          "tp",
+          "trp"
+        ],
+        "name": "MoaPlayer.Video",
+        "description": "동영상 파일",
+        "role": "Viewer"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "omokdie",
+        "repo": "moaplayer",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

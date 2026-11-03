@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/toolbar</item>
+        <item name="android:colorPrimaryDark">@color/toolbar</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/toolbar</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/text2</item>
+        <item name="android:alertDialogTheme">@style/DialogTheme</item>
+    </style>
+
+    <style name="SettingsTheme" parent="@android:style/Theme.Material">
+        <item name="android:colorPrimary">@color/toolbar</item>
+        <item name="android:colorPrimaryDark">@color/toolbar</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/toolbar</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:alertDialogTheme">@style/DialogTheme</item>
+    </style>
+
+    <style name="DialogTheme" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+    </style>
+
+    <style name="PlayerTheme" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:colorControlActivated">@color/accent</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:alertDialogTheme">@style/DialogTheme</item>
+    </style>
+
+    <style name="PlayerButton">
+        <item name="android:layout_width">46dp</item>
+        <item name="android:layout_height">46dp</item>
+        <item name="android:background">?android:attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">#FFFFFFFF</item>
+    </style>
+
+    <style name="PlayerChip">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">26dp</item>
+        <item name="android:layout_marginLeft">4dp</item>
+        <item name="android:layout_marginRight">4dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:minWidth">36dp</item>
+        <item name="android:paddingLeft">7dp</item>
+        <item name="android:paddingRight">7dp</item>
+        <item name="android:textColor">#FFFFFFFF</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:background">@drawable/bg_chip</item>
+    </style>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">모아 플레이어</string>
+    <string name="channel_playback">백그라운드 재생</string>
+    <string name="search">검색</string>
+    <string name="sort">정렬</string>
+    <string name="view_mode">보기 방식</string>
+    <string name="refresh">새로 고침</string>
+    <string name="network_stream">네트워크 스트림</string>
+    <string name="settings">설정</string>
+    <string name="search_hint">동영상 이름 검색</string>
+    <string name="perm_needed">동영상 목록을 보려면 저장소(동영상) 접근 권한이 필요합니다.</string>
+    <string name="perm_grant">권한 허용</string>
+    <string name="no_videos">동영상이 없습니다.</string>
+    <string name="resume_last">마지막 재생 이어보기</string>
+    <!-- GitHub owner/repo whose Releases carry the APK (UpdateChecker) -->
+    <string name="update_repo" translatable="false">omokdie/moaplayer</string>
+</resources>

@@ -1,0 +1,25 @@
+# dependencies / build output
+node_modules/
+pc/dist/
+pc/ffmpeg/
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+.gradle/
+*.iml
+
+# signing keys - never commit these (see RELEASING.md)
+*.keystore
+*.jks
+*.p12
+*.pfx
+android/keystore.properties
+android/keystore/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

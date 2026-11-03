@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <PreferenceCategory android:title="재생">
+        <ListPreference android:key="decoder" android:title="기본 디코더" android:summary="%s"
+            android:entries="@array/decoder_entries" android:entryValues="@array/decoder_values" android:defaultValue="hw"/>
+        <ListPreference android:key="resume" android:title="이어보기" android:summary="%s"
+            android:entries="@array/resume_entries" android:entryValues="@array/resume_values" android:defaultValue="ask"/>
+        <SwitchPreference android:key="autoplay_next" android:title="다음 동영상 자동 재생"
+            android:summary="동영상이 끝나면 같은 폴더의 다음 파일 재생" android:defaultValue="true"/>
+        <ListPreference android:key="orientation" android:title="화면 방향" android:summary="%s"
+            android:entries="@array/orient_entries" android:entryValues="@array/orient_values" android:defaultValue="video"/>
+        <SwitchPreference android:key="background_play" android:title="백그라운드 재생"
+            android:summary="홈 버튼을 누르거나 화면을 꺼도 소리 계속 재생" android:defaultValue="false"/>
+        <SwitchPreference android:key="auto_pip" android:title="홈 버튼 누르면 팝업(PiP) 재생"
+            android:summary="재생 중 홈으로 나가면 작은 창으로 계속 재생" android:defaultValue="false"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="제스처">
+        <SwitchPreference android:key="gesture_brightness" android:title="밝기 조절" android:summary="화면 왼쪽을 위/아래로 스와이프" android:defaultValue="true"/>
+        <SwitchPreference android:key="gesture_volume" android:title="볼륨 조절" android:summary="화면 오른쪽을 위/아래로 스와이프" android:defaultValue="true"/>
+        <SwitchPreference android:key="gesture_seek" android:title="탐색" android:summary="화면을 좌/우로 스와이프" android:defaultValue="true"/>
+        <SwitchPreference android:key="gesture_zoom" android:title="확대/축소" android:summary="두 손가락으로 벌리거나 오므리기" android:defaultValue="true"/>
+        <ListPreference android:key="double_tap" android:title="더블 탭" android:summary="%s"
+            android:entries="@array/doubletap_entries" android:entryValues="@array/doubletap_values" android:defaultValue="seek"/>
+        <ListPreference android:key="seek_seconds" android:title="더블 탭 탐색 간격" android:summary="%s"
+            android:entries="@array/seeksec_entries" android:entryValues="@array/seeksec_values" android:defaultValue="10"/>
+        <SwitchPreference android:key="long_press_speed" android:title="길게 눌러 2배속" android:summary="화면을 누르고 있는 동안 2배속 재생" android:defaultValue="true"/>
+        <SwitchPreference android:key="volume_boost" android:title="볼륨 부스트" android:summary="최대 볼륨 이상으로 키우기 (음량 증폭)" android:defaultValue="true"/>
+        <SwitchPreference android:key="remember_brightness" android:title="밝기 기억" android:summary="플레이어에서 조절한 밝기를 다음에도 사용" android:defaultValue="false"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="자막">
+        <ListPreference android:key="sub_size" android:title="글자 크기" android:summary="%s"
+            android:entries="@array/subsize_entries" android:entryValues="@array/subsize_values" android:defaultValue="100"/>
+        <ListPreference android:key="sub_color" android:title="글자 색" android:summary="%s"
+            android:entries="@array/subcolor_entries" android:entryValues="@array/subcolor_values" android:defaultValue="#FFFFFFFF"/>
+        <SwitchPreference android:key="sub_outline" android:title="테두리" android:defaultValue="true"/>
+        <SwitchPreference android:key="sub_bg" android:title="반투명 배경" android:defaultValue="false"/>
+        <ListPreference android:key="sub_bottom" android:title="위치" android:summary="%s"
+            android:entries="@array/subbottom_entries" android:entryValues="@array/subbottom_values" android:defaultValue="6"/>
+        <ListPreference android:key="sub_encoding" android:title="자막 인코딩" android:summary="%s"
+            android:entries="@array/subenc_entries" android:entryValues="@array/subenc_values" android:defaultValue="auto"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="목록">
+        <SwitchPreference android:key="show_thumbs" android:title="썸네일 표시" android:defaultValue="true"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="업데이트">
+        <SwitchPreference android:key="auto_update" android:title="새 버전 알림"
+            android:summary="새 버전이 나오면 알려 드립니다 (GitHub에서 확인, 하루 두 번까지)" android:defaultValue="true"/>
+        <Preference android:key="check_update" android:title="지금 업데이트 확인"/>
+    </PreferenceCategory>
+    <PreferenceCategory android:title="기타">
+        <Preference android:key="all_files" android:title="모든 파일 접근 권한" android:summary="자막 파일(SMI·SRT)을 자동으로 불러오는 데 필요합니다"/>
+        <Preference android:key="clear_history" android:title="재생 기록 지우기" android:summary="이어보기 위치와 NEW 표시를 초기화합니다"/>
+        <Preference android:key="about" android:title="정보" android:summary="모아 플레이어 1.0"/>
+    </PreferenceCategory>
+</PreferenceScreen>

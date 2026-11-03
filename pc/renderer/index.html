@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' moa: data: blob:; media-src moa: blob: data:; connect-src moa:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+<title>모아 플레이어</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <section id="library">
+    <header class="appbar">
+      <button id="lib-back" class="icon-btn hidden" title="뒤로 (Backspace)"></button>
+      <div class="titles"><h1 id="lib-title">모아 플레이어</h1><div id="lib-sub" class="sub"></div></div>
+      <div class="search"><span class="search-ic"></span><input id="search" type="search" placeholder="동영상 이름 검색 (Ctrl+F)" spellcheck="false"></div>
+      <button id="btn-open" class="icon-btn" title="파일 열기 (Ctrl+O)"></button>
+      <button id="btn-add-folder" class="icon-btn" title="폴더 추가"></button>
+      <button id="btn-sort" class="icon-btn" title="정렬"></button>
+      <button id="btn-view" class="icon-btn" title="보기 방식"></button>
+      <button id="btn-refresh" class="icon-btn" title="새로 고침 (F5)"></button>
+      <button id="btn-settings" class="icon-btn" title="설정"></button>
+    </header>
+    <main id="lib-content"></main>
+    <button id="fab" class="fab hidden" title="마지막 재생 이어보기"></button>
+  </section>
+
+  <section id="player" class="hidden">
+    <div id="stage"><video id="video" preload="auto" crossorigin="anonymous" disablepictureinpicture="false"></video></div>
+    <div id="subs" class="subs"></div>
+    <div id="gesture"></div>
+    <div id="seek-left" class="ripple left hidden"><span class="r-ic"></span><span class="r-tx"></span></div>
+    <div id="seek-right" class="ripple right hidden"><span class="r-ic"></span><span class="r-tx"></span></div>
+    <div id="hud" class="hud hidden"><div class="hud-icon"></div><div class="hud-text"></div><div class="hud-sub"></div><div class="hud-bar"><i></i><b></b></div></div>
+    <div id="speed-badge" class="badge hidden"></div>
+    <div id="spinner" class="spinner hidden"></div>
+    <div id="controls">
+      <div class="top-bar">
+        <button id="p-back" class="icon-btn" title="뒤로 (Esc)"></button>
+        <div id="p-title" class="p-title"></div>
+        <button id="chip-ab" class="chip hidden" title="A-B 반복 해제">A-B</button>
+        <button id="chip-dec" class="chip" title="디코더 전환 (H)">HW</button>
+        <button id="p-pip" class="icon-btn" title="팝업 재생 (PiP)"></button>
+        <button id="p-audio" class="icon-btn" title="오디오 트랙 (A)"></button>
+        <button id="p-sub" class="icon-btn" title="자막 (S)"></button>
+        <button id="p-more" class="icon-btn" title="더 보기"></button>
+      </div>
+      <div class="bottom-bar">
+        <div class="seek-row">
+          <span id="t-pos" class="time">00:00</span>
+          <div id="seekbar" class="seekbar"><div class="track"><div class="buf"></div><div class="prog"></div><div class="ab"></div></div><div class="knob"></div><div class="tip hidden"></div></div>
+          <span id="t-dur" class="time click" title="남은 시간 보기">00:00</span>
+        </div>
+        <div class="btn-row">
+          <button id="p-lock" class="icon-btn" title="화면 잠금 (L)"></button>
+          <button id="chip-speed" class="chip" title="재생 속도 ([ ])">1.0x</button>
+          <div class="vol"><button id="p-mute" class="icon-btn" title="음소거 (M)"></button><input id="vol-slider" type="range" min="0" max="100" step="1" title="볼륨 (↑ ↓, 휠)"></div>
+          <div class="spacer"></div>
+          <button id="p-prev" class="icon-btn" title="이전 파일 (P)"></button>
+          <button id="p-play" class="icon-btn big" title="재생/일시정지 (Space)"></button>
+          <button id="p-next" class="icon-btn" title="다음 파일 (N)"></button>
+          <div class="spacer"></div>
+          <button id="p-aspect" class="icon-btn" title="화면 비율 (R)"></button>
+          <button id="p-full" class="icon-btn" title="전체 화면 (F)"></button>
+        </div>
+      </div>
+    </div>
+    <button id="p-unlock" class="unlock hidden" title="잠금 해제"></button>
+  </section>
+
+  <div id="backdrop" class="backdrop hidden"></div>
+  <aside id="sheet" class="sheet hidden"><div class="sheet-head"><div class="sheet-title"></div><button class="icon-btn sheet-close" title="닫기"></button></div><div class="sheet-body"></div></aside>
+  <div id="menu" class="menu hidden"></div>
+  <div id="dialog" class="dialog hidden"></div>
+  <div id="toast" class="toast hidden"></div>
+  <div id="drop-hint" class="drop-hint hidden"><div>동영상 파일이나 폴더를 여기에 놓으세요</div></div>
+</div>
+<script src="icons.js"></script>
+<script src="subtitles.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

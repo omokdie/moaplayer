@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/bg">
+
+    <Toolbar android:id="@+id/toolbar"
+        android:layout_width="match_parent" android:layout_height="?android:attr/actionBarSize"
+        android:background="@color/toolbar" android:elevation="4dp"
+        android:titleTextColor="@color/text" android:subtitleTextColor="@color/text2"/>
+
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
+
+        <GridView android:id="@+id/grid"
+            android:layout_width="match_parent" android:layout_height="match_parent"
+            android:numColumns="1" android:stretchMode="columnWidth"
+            android:clipToPadding="false" android:paddingBottom="96dp"
+            android:fastScrollEnabled="true" android:scrollbarStyle="outsideOverlay"
+            android:listSelector="@android:color/transparent" android:drawSelectorOnTop="false"/>
+
+        <LinearLayout android:id="@+id/empty"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_gravity="center" android:orientation="vertical" android:gravity="center"
+            android:padding="32dp" android:visibility="gone">
+            <ImageView android:layout_width="72dp" android:layout_height="72dp"
+                android:src="@drawable/ic_movie" android:tint="@color/text2" android:alpha="0.6"/>
+            <TextView android:id="@+id/empty_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="16dp" android:gravity="center"
+                android:textColor="@color/text2" android:textSize="15sp" android:text="@string/no_videos"/>
+            <Button android:id="@+id/empty_button"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="20dp" android:text="@string/perm_grant"
+                android:backgroundTint="@color/accent" android:textColor="#FFFFFFFF" android:visibility="gone"/>
+        </LinearLayout>
+
+        <ProgressBar android:id="@+id/progress"
+            android:layout_width="48dp" android:layout_height="48dp"
+            android:layout_gravity="center" android:indeterminateTint="@color/accent" android:visibility="gone"/>
+
+        <ImageButton android:id="@+id/fab"
+            android:layout_width="58dp" android:layout_height="58dp"
+            android:layout_gravity="bottom|end" android:layout_margin="20dp"
+            android:background="@drawable/bg_fab" android:src="@drawable/ic_play"
+            android:elevation="6dp" android:contentDescription="@string/resume_last" android:visibility="gone"/>
+    </FrameLayout>
+</LinearLayout>

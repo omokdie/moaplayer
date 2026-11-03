@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF121418</color>
+    <color name="surface">#FF1B1E24</color>
+    <color name="surface2">#FF262A33</color>
+    <color name="toolbar">#FF181B21</color>
+    <color name="accent">#FF2F86FF</color>
+    <color name="accent_dark">#FF1E5FCC</color>
+    <color name="text">#FFF1F3F6</color>
+    <color name="text2">#FF9AA3AF</color>
+    <color name="divider">#FF2A2E36</color>
+    <color name="new_badge">#FFFF4D5E</color>
+</resources>
