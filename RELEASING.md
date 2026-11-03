@@ -39,8 +39,9 @@ base64 만들기:
 - Windows PowerShell: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("release.jks")) | Set-Clipboard`
 - macOS / Linux: `base64 -w0 release.jks` (macOS는 `base64 -i release.jks`)
 
-Secrets가 없으면 APK는 임시 **디버그 키**로 서명되고 Release에 `MoaPlayer-<버전>.apk.debug-key.txt` 표시가 붙습니다.
-Secrets를 넣은 뒤 `main`에 아무 커밋이나 push 하면 그 APK만 정식 키로 다시 빌드합니다.
+Secrets가 없으면 **APK를 Release에 올리지 않습니다** (Windows 파일만 올라감). 디버그 키로 서명된 APK를 설치하면
+나중에 정식 키 APK로 업데이트할 수 없기 때문입니다. Secrets를 넣은 뒤 Actions → **Release** → **Run workflow**를 누르거나
+`main`에 아무 커밋이나 push 하면, 빠진 APK만 정식 키로 빌드해 올립니다.
 
 > 키스토어 파일과 비밀번호는 꼭 따로 보관하세요. 잃어버리면 기존 사용자는 앱을 지웠다가 다시 설치해야 합니다.
 

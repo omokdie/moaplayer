@@ -76,13 +76,19 @@ public final class UpdateChecker {
                 running = false;
                 // screen gone (rotation, back): leave the check time alone so the next start asks again
                 if (a.isFinishing() || (android.os.Build.VERSION.SDK_INT >= 17 && a.isDestroyed())) return;
-                if (rel != null) Prefs.sp(app).edit().putLong(Prefs.UPDATE_LAST_CHECK, System.currentTimeMillis()).apply();
                 if (rel == null) {
                     if (manual) Util.toast(a, online(app) ? "업데이트를 확인하지 못했습니다" + (err != null ? " (" + err + ")" : "")
                             : "인터넷에 연결되어 있지 않습니다");
                     return;
                 }
-                if (compare(rel.version, current) <= 0 || rel.apkUrl == null) {
+                boolean newer = compare(rel.version, current) > 0;
+                if (newer && rel.apkUrl == null) {
+                    // the release is published but its APK is still being built: ask again next time
+                    if (manual) Util.toast(a, "새 버전(" + rel.version + ")을 준비하고 있습니다. 잠시 뒤에 다시 확인해 주세요");
+                    return;
+                }
+                Prefs.sp(app).edit().putLong(Prefs.UPDATE_LAST_CHECK, System.currentTimeMillis()).apply();
+                if (!newer) {
                     if (manual) Util.toast(a, "최신 버전입니다 (" + current + ")");
                     return;
                 }

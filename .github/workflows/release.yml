@@ -8,8 +8,9 @@ name: Release
 #   • push to main  → releases automatically when v<version> has no complete release yet
 #                     (bump version.json, push, done — no tag needed). A failed build is retried on
 #                     the next push to main because the release is still incomplete; only the missing
-#                     platform is rebuilt. A debug-signed APK (marker file MoaPlayer-<ver>.apk.debug-key.txt)
-#                     is rebuilt once the signing secret exists.
+#                     platform is rebuilt. The APK is only built and attached when the signing secrets exist
+#                     (a debug-signed APK could never be updated by later release-signed ones); add the
+#                     secrets (RELEASING.md) and push / run the workflow again to add it.
 #   • push a v* tag → same, for that tag (the tag must match version.json)
 #   • manual run    → Actions → Release → Run workflow (force: rebuild even if complete)
 
@@ -40,6 +41,7 @@ jobs:
       build: ${{ steps.check.outputs.build }}
       win: ${{ steps.check.outputs.win }}
       android: ${{ steps.check.outputs.android }}
+      nokey: ${{ steps.check.outputs.nokey }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -59,6 +61,23 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Version $VERSION → $TAG"
 
+      # Earlier versions of this workflow attached debug-signed APKs (marker *.apk.debug-key.txt).
+      # Those can't be updated in place by release-signed builds, so take them down everywhere.
+      - name: Remove debug-signed APKs from releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            -q '.[] | .tag_name as $t | .assets[] | select(.name | endswith(".apk.debug-key.txt")) | "\($t) \(.name)"' > debug-apks.txt || true
+          while read -r T MARKER; do
+            [ -n "$T" ] || continue
+            APK="${MARKER%.debug-key.txt}"
+            echo "::warning::$T: removing debug-signed $APK"
+            gh release delete-asset "$T" "$APK" --repo "$GITHUB_REPOSITORY" -y || true
+            gh release delete-asset "$T" "$MARKER" --repo "$GITHUB_REPOSITORY" -y || true
+          done < debug-apks.txt
+
       - name: Is a (complete) release already there?
         id: check
         env:
@@ -72,14 +91,15 @@ jobs:
           WIN=true; AND=true
           if [ "$FORCE" != "true" ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' > assets.txt 2>/dev/null; then
             if grep -qx "MoaPlayer-Setup-${VERSION}.exe" assets.txt && grep -qx "latest.yml" assets.txt; then WIN=false; fi
-            if grep -qx "MoaPlayer-${VERSION}.apk" assets.txt; then
-              AND=false
-              # debug-signed APK: rebuild it once the signing secret is available
-              if grep -qx "MoaPlayer-${VERSION}.apk.debug-key.txt" assets.txt && [ -n "$HAS_KEY" ]; then AND=true; fi
-            fi
+            if grep -qx "MoaPlayer-${VERSION}.apk" assets.txt; then AND=false; fi
+          fi
+          NOKEY=false
+          if [ "$AND" = "true" ] && [ -z "$HAS_KEY" ]; then
+            AND=false; NOKEY=true
+            echo "::warning::Android signing secrets (ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD) are not set — the APK is not built. Add them (RELEASING.md), then push again or run this workflow."
           fi
           BUILD=false; if [ "$WIN" = "true" ] || [ "$AND" = "true" ]; then BUILD=true; fi
-          { echo "build=$BUILD"; echo "win=$WIN"; echo "android=$AND"; } >> "$GITHUB_OUTPUT"
+          { echo "build=$BUILD"; echo "win=$WIN"; echo "android=$AND"; echo "nokey=$NOKEY"; } >> "$GITHUB_OUTPUT"
           if [ "$BUILD" = "true" ]; then echo "Building $TAG (windows=$WIN android=$AND)"; else echo "$TAG is already released with every file — nothing to do (bump version.json to release again)"; fi
 
       - name: Point the tag at this commit
@@ -160,4 +180,7 @@ jobs:
           echo "### 모아 플레이어 ${{ needs.prepare.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Windows: ${{ needs.windows.result }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Android: ${{ needs.android.result }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.prepare.outputs.nokey }}" = "true" ]; then
+            echo "  - APK not built: add the ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD secrets (RELEASING.md), then run Release again" >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "- Release: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"

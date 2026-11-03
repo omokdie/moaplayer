@@ -409,16 +409,24 @@ handle('shell:showItem', async (p) => { shell.showItemInFolder(p); return true; 
 handle('win:playerState', async (st) => { updateThumbar(st); return true; });
 
 // Windows taskbar preview buttons: previous / play-pause / next (like Windows Media Player).
+// The preview flyout follows the *system* theme (Windows mode), not the app's dark theme:
+// dark glyphs on a light taskbar, white glyphs with a dark rim otherwise.
 const thumbIcons = {};
+function thumbSet() {
+  try { return nativeTheme.shouldUseDarkColorsForSystemIntegratedUI === false ? 'light' : ''; } catch (e) { return ''; }
+}
 function thumbIcon(name) {
-  if (!thumbIcons[name]) thumbIcons[name] = nativeImage.createFromPath(path.join(__dirname, 'assets', 'thumbar', name + '.png'));
-  return thumbIcons[name];
+  const key = thumbSet() + '/' + name;
+  if (!thumbIcons[key]) thumbIcons[key] = nativeImage.createFromPath(path.join(__dirname, 'assets', 'thumbar', thumbSet(), name + '.png'));
+  return thumbIcons[key];
 }
 let thumbKey = '';
+let thumbState = null;
 function updateThumbar(st) {
   if (process.platform !== 'win32' || !win || win.isDestroyed()) return;
+  thumbState = st || null;
   const open = !!(st && st.open);
-  const key = open ? `${st.playing ? 1 : 0}${st.prev ? 1 : 0}${st.next ? 1 : 0}` : '';
+  const key = open ? `${st.playing ? 1 : 0}${st.prev ? 1 : 0}${st.next ? 1 : 0}${thumbSet()}` : '';
   if (key === thumbKey) return;
   thumbKey = key;
   const cmd = (c) => () => { if (win && !win.isDestroyed()) win.webContents.send('media-command', c); };
@@ -436,6 +444,7 @@ function updateThumbar(st) {
 app.whenReady().then(async () => {
   if (!gotLock) return;
   nativeTheme.themeSource = 'dark';   // dark window frame / title bar to match the app
+  nativeTheme.on('updated', () => { thumbKey = ''; updateThumbar(thumbState); });   // Windows light/dark mode switched
   protocol.handle('moa', handleMoa);
   ffmpegOk = await ff.available();
   createWindow();

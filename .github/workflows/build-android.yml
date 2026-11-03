@@ -4,7 +4,8 @@ name: Build Android APK
 # that GitHub Release (where the app's update check looks).
 # Signing: secrets ANDROID_KEYSTORE_BASE64 + ANDROID_KEYSTORE_PASSWORD (optional ANDROID_KEY_ALIAS,
 # default "moa"; ANDROID_KEY_PASSWORD, default = keystore password).  Without them the APK is signed
-# with a debug key (installable, but it cannot update an installed release-signed copy).
+# with a debug key and only kept as a workflow artifact — it is never attached to a release, because a
+# debug-signed install could not be updated by the release-signed APKs that follow.
 
 on:
   workflow_call:
@@ -111,26 +112,16 @@ jobs:
           path: out/*.apk
           if-no-files-found: error
 
-      # A debug-signed APK gets a small marker file next to it in the release; release.yml rebuilds the
-      # APK on the next push to main once the signing secrets exist, and the marker is removed then.
-      - name: Mark a debug-signed APK
+      - name: Debug-signed APK stays out of the release
         if: (inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')) && steps.keystore.outputs.signed != 'true'
-        run: |
-          echo "This APK is signed with a temporary debug key. Add the ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD secrets; the next push to main rebuilds it with the release key." > "out/MoaPlayer-${{ steps.meta.outputs.version }}.apk.debug-key.txt"
+        run: echo "::warning::The APK is signed with a debug key, so it is only kept as a workflow artifact and not attached to the release. Add the signing secrets (RELEASING.md)."
 
       - name: Attach APK to the GitHub Release
-        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')
+        if: (inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')) && steps.keystore.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-          files: out/MoaPlayer-${{ steps.meta.outputs.version }}.apk*
+          files: out/MoaPlayer-${{ steps.meta.outputs.version }}.apk
           fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Remove the debug-key marker (release-signed now)
-        if: (inputs.tag != '' || startsWith(github.ref, 'refs/tags/v')) && steps.keystore.outputs.signed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-        run: gh release delete-asset "$TAG" "MoaPlayer-${{ steps.meta.outputs.version }}.apk.debug-key.txt" --repo "$GITHUB_REPOSITORY" -y || true

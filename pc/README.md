@@ -48,7 +48,8 @@ lib/ffmpeg.js    ffprobe 정보, 썸네일, 내장 자막 추출, 키프레임 �
 lib/library.js   폴더 검색(폴더별 묶음), 같은 이름 자막 찾기
 lib/store.js     설정·재생 기록 JSON 저장
 renderer/        화면 (app.js: 라이브러리·플레이어·제스처·단축키·업데이트 표시, subtitles.js: SMI/SRT/ASS/VTT 파서)
-assets/          창 아이콘, 작업 표시줄 버튼 아이콘(thumbar/ — tools/make-thumbar-icons.py)
+assets/          창 아이콘, 작업 표시줄 버튼 아이콘(thumbar/ 어두운 작업 표시줄용, thumbar/light/ 밝은 작업 표시줄용
+                 — tools/make-thumbar-icons.py)
 build/           설치 프로그램 아이콘 (electron-builder buildResources)
 scripts/         sync-version.mjs (../version.json → package.json), fetch-ffmpeg.ps1
 tests/           Playwright UI 테스트 (Linux + Xvfb) — 아래 참고
