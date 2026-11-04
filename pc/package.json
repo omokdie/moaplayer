@@ -85,6 +85,7 @@
       ],
       "language": "1042",
       "artifactName": "MoaPlayer-Setup-${version}.${ext}",
+      "differentialPackage": false,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false,

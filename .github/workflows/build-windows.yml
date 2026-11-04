@@ -1,6 +1,6 @@
 name: Build Windows installer
 
-# Builds pc/dist/MoaPlayer-Setup-<ver>.exe (+ latest.yml, .blockmap) with FFmpeg inside.
+# Builds pc/dist/MoaPlayer-Setup-<ver>.exe (+ latest.yml) with FFmpeg inside.
 # FFmpeg is our own small build (pc/scripts/build-ffmpeg.sh, cross-compiled on Ubuntu, cached by script hash).
 # Called from release.yml with a tag, the files are attached to that GitHub Release, which is the
 # electron-updater feed of installed copies.  Manual runs only produce workflow artifacts.
@@ -107,7 +107,7 @@ jobs:
           CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
 
-      # electron-builder writes latest.yml (+ .blockmap) because build.publish is configured; the upload
+      # electron-builder writes latest.yml because build.publish is configured; the upload
       # itself is done with action-gh-release below so re-runs are idempotent.
       - name: Build installer
         run: npm run dist:win
@@ -143,7 +143,6 @@ jobs:
           tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           files: |
             pc/dist/MoaPlayer-Setup-*.exe
-            pc/dist/MoaPlayer-Setup-*.exe.blockmap
             pc/dist/latest.yml
           fail_on_unmatched_files: true
         env:

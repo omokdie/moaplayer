@@ -1,7 +1,7 @@
 name: Release
 
 # Creates the GitHub Release "v<version>" (version = version.json) and attaches
-#   MoaPlayer-Setup-<ver>.exe (+ .blockmap, latest.yml = the Windows auto-update feed)
+#   MoaPlayer-Setup-<ver>.exe (+ latest.yml = the Windows auto-update feed)
 #   MoaPlayer-<ver>.apk
 #
 # Triggers
