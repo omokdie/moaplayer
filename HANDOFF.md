@@ -29,7 +29,7 @@
   빌드를 받아 `resources/ffmpeg`에 넣음) + `build-android.yml`(JDK 17, AGP 8.10.1, Gradle 8.14.3 wrapper).
   이 클라우드 세션에서는 태그 push가 막혀 있을 수 있어, 워크플로가 직접 태그를 만듭니다(버전 올려 main push).
   클라우드 세션은 GitHub Release를 직접 만들거나 지울 수 없고(403), Actions Secrets도 설정할 수 없습니다 — 모두 워크플로나 사용자가 합니다.
-- Android 서명: Secrets(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, 별칭 기본 `moa`)가 없으면 APK를 **릴리스에 올리지 않음**
+- Android 서명: Secrets(`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, 별칭 기본 `moa`) — 2026-11-04 등록 완료, v1.2.0부터 정식 키 APK. 없으면 APK를 **릴리스에 올리지 않음**
   (디버그 키 APK는 정식 키 APK로 업데이트가 안 되므로). v1.1.0 첫 빌드 때 올라간 디버그 키 APK는 release.yml의 정리 단계가 지웁니다.
 
 ## 3. 테스트 / 검증 방법
@@ -46,7 +46,6 @@ apksigner verify --print-certs MoaPlayer-x.y.z.apk     # 정식 키 SHA-256 042d
 
 ## 4. 남은 일 / 알려진 제한
 
-0. **사용자가 Android 서명 Secrets를 등록해야 APK가 Release에 올라갑니다** (RELEASING.md). 등록 뒤 Actions → Release → Run workflow.
 1. Windows 실기 확인: 설치·제거, 파일 연결, 자동 업데이트(다음 버전을 낸 뒤 실제로 받아지는지), 작업 표시줄 버튼.
    클라우드에서는 Linux에서만 실행 테스트를 했습니다.
 2. Android 실기 확인(에뮬레이터·실기기에서 돌려 본 적 없음 — 컴파일·API 레벨 검사·코드 리뷰까지만).
