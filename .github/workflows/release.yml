@@ -131,7 +131,7 @@ jobs:
             if [ -n "$NOTES" ]; then echo "$NOTES"; echo; fi
             echo "### 다운로드"
             echo "- **Windows**: \`MoaPlayer-Setup-${V}.exe\` — 내려받아 실행하면 설치됩니다. 설치 후에는 자동으로 업데이트됩니다."
-            echo "- **Android**: \`MoaPlayer-${V}.apk\` — 휴대폰에서 내려받아 설치하세요. 새 버전이 나오면 앱이 알려 줍니다."
+            echo "- **Android**: \`MoaPlayer-${V}.apk\` — 휴대폰에서 내려받아 설치하세요. 1.4.0부터는 앱이 새 버전을 직접 내려받아 설치합니다."
             echo
             echo "_Windows에서 \"Windows의 PC 보호\" 창이 뜨면 **추가 정보 → 실행**을 누르세요 (코드 서명 인증서가 없는 프로그램이라 처음 한 번 표시됩니다)._"
             echo
