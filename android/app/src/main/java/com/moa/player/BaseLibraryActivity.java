@@ -78,6 +78,8 @@ public abstract class BaseLibraryActivity extends Activity {
     protected void onResume() {
         super.onResume();
         videoAdapter.setThumbs(Prefs.bool(this, Prefs.THUMBS, true));
+        // get the next playback ready while browsing (spare player, codec list)
+        PlayerEngine.get(this).warmUp();
     }
 
     @Override

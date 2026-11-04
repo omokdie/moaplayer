@@ -8,7 +8,10 @@ MX Player와 같은 방식으로 쓰는 안드로이드 동영상 플레이어�
 2. 파일을 눌러 설치합니다. "출처를 알 수 없는 앱" 경고가 나오면 해당 앱(브라우저/파일 관리자)에 설치 권한을 허용하세요.
 3. 처음 실행하면 동영상 접근 권한을 허용합니다. Android 11 이상에서는 자막 파일(SMI·SRT)을 자동으로 불러오기 위해
    **모든 파일 접근** 권한을 묻습니다(설정에서 나중에 켜도 됩니다).
-4. 새 버전이 나오면 앱을 열 때 알려 줍니다(설정 → 업데이트 → 새 버전 알림 / 지금 업데이트 확인).
+4. 그다음부터는 **자동으로 업데이트**됩니다(설정 → 업데이트 → 자동 업데이트 / 지금 업데이트 확인).
+   앱을 열면 GitHub에서 새 버전을 확인해 내려받고(크기·SHA-256·패키지·버전·서명 확인), Android 12~16은
+   앱을 쓰지 않을 때(화면을 다 닫고 재생 중이 아닐 때) 묻지 않고 설치합니다. 처음 한 번은 Android가
+   "이 출처 허용"을 묻습니다. 그 밖의 버전은 [지금 설치] → [업데이트]를 누릅니다.
 
 - 지원: Android 7.0 (API 24) 이상
 
@@ -21,7 +24,7 @@ MX Player와 같은 방식으로 쓰는 안드로이드 동영상 플레이어�
 | 디코더 | **HW / SW 전환**(SW = 기기의 소프트웨어 코덱 우선). HW 디코딩 실패 시 SW로 자동 전환 |
 | 자막 | 같은 이름의 SMI·SRT·ASS·SSA·VTT 자동 로드, 한글 EUC-KR(CP949)/UTF-8/UTF-16 자동 인식, SMI 다국어(한국어/영어) 선택, MKV·MP4 내장 자막(SRT·ASS·PGS·VobSub), 파일 선택기로 열기, 싱크 조절(파일별 저장), 크기·색·테두리·배경·위치 |
 | 오디오 | 오디오 트랙 선택(언어·코덱·채널 표시), 지원 안 되는 코덱 안내 |
-| 기타 | 이어보기(묻기/항상/안 함), 다음 파일 자동 재생, 반복(한 개/전체), A-B 구간 반복, 수면 타이머, 백그라운드 재생(알림 컨트롤), 팝업(PiP) 재생, 스크린샷(사진/MoaPlayer), 동영상 정보, 네트워크 스트림(HTTP·HLS·DASH·RTSP), 다른 앱의 "열기"로 재생, 새 버전 알림(GitHub Releases) |
+| 기타 | 이어보기(묻기/항상/안 함), 다음 파일 자동 재생, 반복(한 개/전체), A-B 구간 반복, 수면 타이머, 백그라운드 재생(알림 컨트롤), 팝업(PiP) 재생, 스크린샷(사진/MoaPlayer), 동영상 정보, 네트워크 스트림(HTTP·HLS·DASH·RTSP), 다른 앱의 "열기"로 재생, 자동 업데이트(GitHub Releases) |
 
 ## 소스에서 빌드
 ### Android Studio / Gradle
@@ -42,12 +45,17 @@ app/src/main/java/com/moa/player/
   VideoListActivity     폴더 안 동영상 목록
   BaseLibraryActivity   정렬·검색·정보·공유·이름 변경·삭제 공통 기능
   PlayerActivity        플레이어 화면 (컨트롤, 제스처 처리, 자막/오디오/속도 등 메뉴, PiP)
-  PlayerEngine          ExoPlayer와 재생 목록을 가진 싱글턴 (백그라운드 재생 유지, HW/SW 코덱 선택)
+  PlayerEngine          ExoPlayer와 재생 목록을 가진 싱글턴 (백그라운드 재생 유지, HW/SW 코덱 선택,
+                        누르는 순간 파일을 미리 여는 빠른 시작, 예비 플레이어·코덱 목록 미리 준비)
   PlaybackService       백그라운드 재생 포그라운드 서비스 + 미디어 알림
   GestureView           MX 방식 터치 제스처
   VideoFrameLayout      화면 비율·확대·이동 배치
   SubtitleParser/View   SMI·SRT·ASS·VTT 파서와 테두리 자막 렌더러
-  UpdateChecker         GitHub Releases에서 새 APK 확인 → 내려받기 안내
+  UpdateChecker         GitHub Releases에서 새 버전 확인
+  UpdateInstaller       새 APK 내려받기·확인, 설치(Android 12+ 무확인 설치 / 시스템 설치 화면)
+  UpdateFileProvider    내려받은 APK를 설치 화면에 넘기는 content:// 제공자
+  UpdateReceiver        설치 결과, "앱이 업데이트됨"(MY_PACKAGE_REPLACED)
+  UpdateJobService      앱을 쓰지 않을 때 무확인 설치를 실행하는 JobScheduler 작업
   MediaRepo, ThumbLoader, HistoryDb, Prefs, SettingsActivity
 ```
 
@@ -55,4 +63,5 @@ app/src/main/java/com/moa/player/
 - SW 디코더는 기기에 들어 있는 소프트웨어 코덱을 씁니다. MX Player의 자체 FFmpeg 코덱과 달리, 기기가 지원하지 않는
   오디오(AC3·DTS 등)는 소리 없이 재생될 수 있습니다(재생 시 안내가 나옵니다).
 - 내장 자막에는 싱크 조절이 적용되지 않고, 외부 자막에만 적용됩니다.
-- 업데이트는 브라우저로 APK를 받아 직접 설치하는 방식입니다(Play 스토어 배포가 아니므로).
+- Play 스토어 배포가 아니므로 자동 업데이트에는 "출처를 알 수 없는 앱 설치" 허용이 한 번 필요합니다.
+  지금 설치된 앱과 서명이 다른 APK(예: 직접 디버그 키로 빌드한 것)는 그 위에 설치할 수 없어, 지우고 다시 설치해야 합니다.

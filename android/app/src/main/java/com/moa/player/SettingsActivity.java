@@ -69,9 +69,9 @@ public class SettingsActivity extends Activity {
             }
             Preference check = findPreference("check_update");
             if (check != null) {
-                check.setSummary("지금 버전: " + UpdateChecker.currentVersion(getActivity()));
                 check.setOnPreferenceClickListener(p -> {
-                    UpdateChecker.check(getActivity(), true);
+                    if (UpdateInstaller.readyVersion(getActivity()) != null) UpdateInstaller.maybePrompt(getActivity(), true);
+                    else UpdateChecker.check(getActivity(), true);
                     return true;
                 });
             }
@@ -89,6 +89,13 @@ public class SettingsActivity extends Activity {
         @Override
         public void onResume() {
             super.onResume();
+            Preference check = findPreference("check_update");
+            if (check != null) {
+                String ready = UpdateInstaller.readyVersion(getActivity());
+                check.setSummary(ready != null
+                        ? "새 버전 " + ready + " 설치 준비됨 — 눌러서 지금 설치"
+                        : "지금 버전: " + UpdateChecker.currentVersion(getActivity()));
+            }
             Preference all = findPreference("all_files");
             if (all != null && Build.VERSION.SDK_INT >= 30) {
                 all.setSummary(Environment.isExternalStorageManager()

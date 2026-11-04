@@ -45,8 +45,8 @@
         <SwitchPreference android:key="show_thumbs" android:title="썸네일 표시" android:defaultValue="true"/>
     </PreferenceCategory>
     <PreferenceCategory android:title="업데이트">
-        <SwitchPreference android:key="auto_update" android:title="새 버전 알림"
-            android:summary="새 버전이 나오면 알려 드립니다 (GitHub에서 확인, 하루 두 번까지)" android:defaultValue="true"/>
+        <SwitchPreference android:key="auto_update" android:title="자동 업데이트"
+            android:summary="새 버전을 GitHub에서 자동으로 내려받습니다. '이 출처 허용'을 켜 두면 Android 12~16에서는 앱을 쓰지 않을 때 묻지 않고 설치하고, 그 밖에는 [지금 설치]로 설치합니다" android:defaultValue="true"/>
         <Preference android:key="check_update" android:title="지금 업데이트 확인"/>
     </PreferenceCategory>
     <PreferenceCategory android:title="기타">

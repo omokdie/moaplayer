@@ -21,14 +21,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Looks at the newest GitHub Release (the same place the Windows version updates from) and,
- * when it carries a newer APK, offers to download it.  Automatic checks run at most every
- * 12 hours and stay silent when offline; "지금 업데이트 확인" in the settings always reports back.
+ * Looks at the newest GitHub Release (the same place the Windows version updates from). When it
+ * carries a newer APK, {@link UpdateInstaller} downloads, checks and installs it.  Automatic checks
+ * run at most every 3 hours and stay silent when offline; "지금 업데이트 확인" in the settings always
+ * reports back.
  */
 public final class UpdateChecker {
     private UpdateChecker() {}
 
-    private static final long INTERVAL_MS = 12L * 60 * 60 * 1000;
+    private static final long INTERVAL_MS = 3L * 60 * 60 * 1000;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler UI = new Handler(Looper.getMainLooper());
     private static volatile boolean running;
@@ -40,6 +41,7 @@ public final class UpdateChecker {
         String pageUrl;   // release page on GitHub
         String notes;     // plain text, may be empty
         long apkSize;
+        String sha256;    // of the APK, when GitHub lists a digest
     }
 
     /** Called from the folder screen; does nothing when switched off or checked recently. */
@@ -92,26 +94,53 @@ public final class UpdateChecker {
                     if (manual) Util.toast(a, "최신 버전입니다 (" + current + ")");
                     return;
                 }
+                if (UpdateInstaller.isBlocked(app, rel.version)) {
+                    // can never install here (other signer, ...): explained once already, no more downloads
+                    if (manual) UpdateInstaller.explain(a, rel.version, Prefs.str(a, Prefs.UPDATE_BLOCKED_KIND, ""));
+                    return;
+                }
                 if (!manual && rel.version.equals(Prefs.str(a, Prefs.UPDATE_SKIPPED, ""))) return;
-                showDialog(a, rel, current);
+                download(a, rel, manual);
             });
         });
     }
 
-    private static void showDialog(final Activity a, final Release r, String current) {
-        StringBuilder msg = new StringBuilder();
-        msg.append("새 버전(").append(r.version).append(")이 나왔습니다. 지금 쓰는 버전은 ").append(current).append("입니다.");
-        if (r.apkSize > 0) msg.append("\n파일 크기: ").append(Util.size(r.apkSize));
-        if (r.notes != null && !r.notes.isEmpty()) msg.append("\n\n").append(r.notes);
-        msg.append("\n\n[다운로드]를 누르면 브라우저에서 APK를 내려받습니다. 다 받은 뒤 파일을 열어 설치하세요. 설정과 재생 기록은 그대로 남습니다.");
-        new AlertDialog.Builder(a)
-                .setTitle("업데이트 " + r.version)
-                .setMessage(msg.toString())
-                .setPositiveButton("다운로드", (d, w) -> open(a, r.apkUrl != null ? r.apkUrl : r.pageUrl))
-                .setNegativeButton("나중에", null)
-                .setNeutralButton("이 버전 건너뛰기", (d, w) ->
-                        Prefs.sp(a).edit().putString(Prefs.UPDATE_SKIPPED, r.version).apply())
-                .show();
+    /** Fetches the APK in the background, then installs it (by itself) or offers it. */
+    private static void download(final Activity a, final Release r, final boolean manual) {
+        if (manual) Util.toast(a, "새 버전 " + r.version + "을(를) 내려받는 중…");
+        UpdateInstaller.fetch(a, r, new UpdateInstaller.Listener() {
+            @Override public void onReady(String version) {
+                if (App.visible == 0) {
+                    // the app was left while downloading: install now if it can go by itself
+                    UpdateInstaller.onAppBackground(a.getApplicationContext());
+                    return;
+                }
+                if (a.isFinishing() || (android.os.Build.VERSION.SDK_INT >= 17 && a.isDestroyed())) return; // offered on the next start
+                if (!manual && PlayerActivity.isAlive()) return; // not over a video: offered back on the folder screen
+                UpdateInstaller.maybePrompt(a, manual);
+            }
+
+            @Override public void onError(String message, String blockedKind) {
+                // automatic: try again at the next check (a blocked version is explained on the folder screen)
+                if (!manual || a.isFinishing() || (android.os.Build.VERSION.SDK_INT >= 17 && a.isDestroyed())) return;
+                if (blockedKind != null) {
+                    Prefs.sp(a).edit().remove(Prefs.UPDATE_ERROR).apply(); // explained right here
+                    UpdateInstaller.explain(a, r.version, blockedKind);
+                    return;
+                }
+                if (UpdateInstaller.BUSY.equals(message)) {
+                    Util.toast(a, message);
+                    return;
+                }
+                new AlertDialog.Builder(a)
+                        .setTitle("업데이트 " + r.version)
+                        .setMessage("새 버전을 내려받지 못했습니다: " + message
+                                + "\n\n브라우저에서 APK를 받아 직접 설치할 수도 있습니다. 설정과 재생 기록은 그대로 남습니다.")
+                        .setPositiveButton("브라우저에서 받기", (d, w) -> open(a, r.apkUrl != null ? r.apkUrl : r.pageUrl))
+                        .setNegativeButton("닫기", null)
+                        .show();
+            }
+        });
     }
 
     private static void open(Activity a, String url) {
@@ -157,6 +186,8 @@ public final class UpdateChecker {
                 if (name.toLowerCase(java.util.Locale.ROOT).endsWith(".apk")) {
                     r.apkUrl = as.optString("browser_download_url", null);
                     r.apkSize = as.optLong("size", 0);
+                    String dg = as.optString("digest", "");
+                    if (dg.startsWith("sha256:") && dg.length() == 7 + 64) r.sha256 = dg.substring(7);
                     break;
                 }
             }

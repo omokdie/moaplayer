@@ -60,9 +60,10 @@ public class MainActivity extends BaseLibraryActivity {
         } else {
             requestMediaPermission();
         }
-        // new version on GitHub? (quietly, a few seconds after start)
-        ui.postDelayed(() -> { if (!isFinishing()) UpdateChecker.maybeCheck(this); }, 3000);
     }
+
+    /** New version on GitHub? (quietly, a few seconds after the folder screen shows; at most every 3 h) */
+    private final Runnable updateCheck = () -> { if (!isFinishing()) UpdateChecker.maybeCheck(this); };
 
     @Override
     protected void onResume() {
@@ -72,6 +73,16 @@ public class MainActivity extends BaseLibraryActivity {
             else refreshHistoryAndFolders();
         }
         updateFab();
+        // "업데이트했습니다" after an update, or offer a downloaded one
+        UpdateInstaller.onForeground(this);
+        ui.removeCallbacks(updateCheck);
+        ui.postDelayed(updateCheck, 3000);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ui.removeCallbacks(updateCheck);
     }
 
     @Override

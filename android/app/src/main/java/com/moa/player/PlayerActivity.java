@@ -2,6 +2,7 @@ package com.moa.player;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.PendingIntent;
@@ -101,12 +102,31 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
 
     public static void play(Context c, List<VideoItem> list, int index, boolean fromStart) {
         if (list == null || list.isEmpty() || index < 0) return;
-        PlayerEngine.get(c).setPending(MediaRef.list(list), index, fromStart);
-        c.startActivity(new Intent(c, PlayerActivity.class).putExtra(EXTRA_PENDING, true));
+        PlayerEngine e = PlayerEngine.get(c);
+        List<MediaRef> refs = MediaRef.list(list);
+        e.setPending(refs, index, fromStart);
+        // start opening the file now: it decodes while the player screen is being created
+        if (!isAlive()) e.prepareAhead(refs.get(Math.min(index, refs.size() - 1)), fromStart);
+        launch(c, new Intent(c, PlayerActivity.class).putExtra(EXTRA_PENDING, true));
     }
 
     public static void playUri(Context c, Uri uri) {
-        c.startActivity(new Intent(Intent.ACTION_VIEW, uri, c, PlayerActivity.class));
+        launch(c, new Intent(Intent.ACTION_VIEW, uri, c, PlayerActivity.class));
+    }
+
+    /** Shows the player screen at once: no window animation and no splash icon in between. */
+    @SuppressWarnings("deprecation")
+    private static void launch(Context c, Intent i) {
+        i.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+        Bundle opts = null;
+        if (Build.VERSION.SDK_INT >= 33) {
+            ActivityOptions o = ActivityOptions.makeBasic();
+            o.setSplashScreenStyle(android.window.SplashScreen.SPLASH_SCREEN_STYLE_SOLID_COLOR);
+            opts = o.toBundle();
+        }
+        if (!(c instanceof Activity)) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        c.startActivity(i, opts);
+        if (c instanceof Activity && Build.VERSION.SDK_INT < 34) ((Activity) c).overridePendingTransition(0, 0);
     }
 
     /** Next / previous from the notification or PiP controls. */
@@ -120,10 +140,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     }
 
     static void finishIfOpen() {
-        if (live != null) {
-            live.closing = true;
-            live.finish();
-        }
+        if (live != null) live.exitPlayer();
     }
 
     // ------------------------------------------------------------------ fields
@@ -147,6 +164,9 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     private boolean locked, userSeeking, showRemaining, closing, inPipSession, triedSwFallback, bgRequested;
     private boolean resumeAfterPicker;
     private boolean stopped, resumed;
+    /** Paused in onPause on the way out; resumed again if only something covered the screen. */
+    private boolean pausedByLeave;
+    private long pausedByLeaveAt;
     private String orientPref;
     private long seekStartPos, seekTarget, lastLiveSeek;
     private boolean seekWasPlaying, seekActive;
@@ -182,15 +202,22 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
             live.finish();
         }
         live = this;
+        if (Build.VERSION.SDK_INT >= 34) {
+            // open and close without the window animation
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, 0, 0);
+            overrideActivityTransition(OVERRIDE_TRANSITION_CLOSE, 0, 0);
+        }
         setContentView(R.layout.activity_player);
         engine = PlayerEngine.get(this);
         audio = (AudioManager) getSystemService(AUDIO_SERVICE);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
+        WindowManager.LayoutParams lp = getWindow().getAttributes();
+        // turn to the video's orientation at once instead of the animated rotation
+        lp.rotationAnimation = WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
         if (Build.VERSION.SDK_INT >= 28) {
-            WindowManager.LayoutParams lp = getWindow().getAttributes();
             lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-            getWindow().setAttributes(lp);
         }
+        getWindow().setAttributes(lp);
         bindViews();
         loadPrefs();
         applySubtitleStyle();
@@ -267,6 +294,13 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
             engine.backgroundActive = false;
         }
         if (inPipSession && !isInPip()) inPipSession = false;
+        if (pausedByLeave) {
+            // only a dialog or a small window covered the player (the screen never stopped),
+            // unless the sleep timer ran out meanwhile
+            pausedByLeave = false;
+            ExoPlayer p = engine.player();
+            if (p != null && engine.sleepStoppedAt < pausedByLeaveAt) p.play();
+        }
         updatePlayButton();
     }
 
@@ -274,10 +308,26 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     protected void onPause() {
         super.onPause();
         resumed = false;
-        if (isChangingConfigurations()) return;
-        if (!isFinishing() && !closing && !isInPip() && shouldBackground()) {
+        if (isChangingConfigurations() || superseded()) return;
+        if (isFinishing() || closing) {
+            haltForExit();
+            return;
+        }
+        if (isInPip() || inPipSession) return; // (inPipSession: entering it right now from onUserLeaveHint)
+        if (shouldBackground()) {
             bgRequested = true;
             PlaybackService.start(this);
+            return;
+        }
+        // Home, recents, another app: silence now. onStop only comes after the system animation,
+        // and the video would keep playing (and its saved position move on) until then.
+        if (Build.VERSION.SDK_INT >= 24 && isInMultiWindowMode()) return;
+        ExoPlayer p = engine.player();
+        if (p != null && p.getPlayWhenReady() && p.getPlaybackState() != Player.STATE_ENDED) {
+            p.pause();
+            engine.savePosition();
+            pausedByLeave = true;
+            pausedByLeaveAt = SystemClock.elapsedRealtime();
         }
     }
 
@@ -285,8 +335,9 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     protected void onStop() {
         super.onStop();
         stopped = true;
+        pausedByLeave = false; // really left: stay paused, as before
         ui.removeCallbacks(subTick);
-        if (isChangingConfigurations()) return;
+        if (isChangingConfigurations() || superseded()) return;
         ExoPlayer p = engine.player();
         if (inPipSession && !isInPip()) {
             // the picture-in-picture window was closed
@@ -345,9 +396,47 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
             Util.toast(this, "화면이 잠겨 있습니다. 자물쇠를 눌러 잠금을 해제하세요");
             return;
         }
+        exitPlayer(); // what Activity.onBackPressed() does here (finish), plus stopping the sound first
+    }
+
+    /**
+     * A newer player screen took over (this one was closing when another video was opened): the
+     * shared player belongs to that one now, so this screen must not pause or save it any more.
+     */
+    private boolean superseded() {
+        return live != null && live != this;
+    }
+
+    /**
+     * The user is leaving the player: stop the sound and store the exact position right now.
+     * onStop / onDestroy only arrive after the exit animation and once the next screen has
+     * settled, so playback used to go on unseen for about a second, and the saved position moved
+     * on by the same amount.
+     */
+    private void haltForExit() {
         closing = true;
+        pausedByLeave = false;
+        ui.removeCallbacks(progressTick);
+        if (superseded()) return;
+        ExoPlayer p = engine.player();
+        if (p == null) return;
+        p.pause();
         engine.savePosition();
-        super.onBackPressed();
+    }
+
+    /** Closes the player screen: silent at once, no close animation, decoders freed in the background. */
+    void exitPlayer() {
+        haltForExit();
+        ExoPlayer p = engine.player();
+        // releases the decoders on the playback thread now, so onDestroy has little left to do
+        if (p != null && !engine.backgroundActive && !superseded()) p.stop();
+        finish();
+        skipCloseAnimation();
+    }
+
+    @SuppressWarnings("deprecation")
+    private void skipCloseAnimation() {
+        if (Build.VERSION.SDK_INT < 34) overridePendingTransition(0, 0);
     }
 
     @Override
@@ -433,11 +522,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         gestures.setCallback(this);
         videoFrame.setOnVideoRectListener((l, t, r, bt) -> subView.setVideoRect(l, t, r, bt));
 
-        btnBack.setOnClickListener(v -> {
-            closing = true;
-            engine.savePosition();
-            finish();
-        });
+        btnBack.setOnClickListener(v -> exitPlayer());
         btnPlay.setOnClickListener(v -> { togglePlay(); scheduleHide(); });
         btnPrev.setOnClickListener(v -> skip(-1));
         btnNext.setOnClickListener(v -> skip(1));
@@ -564,8 +649,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
                 if (engine.player() != null && engine.current() != null) {
                     attach();
                 } else {
-                    closing = true;
-                    finish();
+                    exitPlayer();
                 }
                 return;
             }
@@ -602,8 +686,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     private void startCurrent(boolean fromStart) {
         MediaRef r = engine.current();
         if (r == null) {
-            closing = true;
-            finish();
+            exitPlayer();
             return;
         }
         if (resumeDialog != null) {
@@ -612,6 +695,8 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         }
         boolean sw = "sw".equals(Prefs.str(this, Prefs.DECODER, "hw"));
         triedSwFallback = sw;
+        // opened already when the file was tapped (PlayerEngine.prepareAhead)?
+        boolean ahead = engine.takeAhead(r, sw, fromStart);
         ExoPlayer p = engine.ensure(sw);
         p.setVideoSurfaceView(surface);
         releaseLoudness();
@@ -629,11 +714,12 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
 
         HistoryDb.Entry h = r.stream ? null : HistoryDb.get(this).get(r.key());
         engine.subDelay = h != null ? h.subDelay : 0;
-        long resume = 0;
-        if (!fromStart && h != null && !h.finished() && h.position > 5000) resume = h.position;
+        long resume = engine.resumePosition(r, fromStart);
         String mode = Prefs.str(this, Prefs.RESUME, "ask");
-        if ("never".equals(mode)) resume = 0;
         // A prompt nobody can see (background, PiP) would stall playback: resume directly then.
+        // Opening from the list (onCreate / onNewIntent run before onResume) also starts at once,
+        // with a toast, so a tap plays immediately; "매번 묻기" asks when moving to another file
+        // inside the player.
         boolean visible = resumed && !isInPip();
         boolean ask = resume > 0 && "ask".equals(mode) && visible;
 
@@ -647,15 +733,29 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
                 .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, stopped && !isInPip())
                 .build();
         p.setTrackSelectionParameters(tsp);
-        try {
-            p.setMediaItem(PlayerEngine.mediaItemFor(r), ask ? 0 : resume);
-            p.setPlaybackParameters(new PlaybackParameters(engine.speed));
-            p.setRepeatMode(Player.REPEAT_MODE_OFF);
-            p.setWakeMode(r.stream ? C.WAKE_MODE_NETWORK : C.WAKE_MODE_LOCAL);
-            p.prepare();
-        } catch (RuntimeException e) {
-            showFatal("이 주소나 파일을 열 수 없습니다.\n\n(" + e.getClass().getSimpleName() + ")");
-            return;
+        int w = r.widthHint, hgt = r.heightHint;
+        if (ahead) {
+            // events that fired between the tap and this screen listening
+            VideoSize vs = p.getVideoSize();
+            if (vs.width > 0 && vs.height > 0) {
+                videoFrame.setVideoSize(vs.width, vs.height, vs.pixelWidthHeightRatio);
+                w = Math.round(vs.width * vs.pixelWidthHeightRatio);
+                hgt = vs.height;
+            }
+            checkTracks(p.getCurrentTracks());
+            if (engine.currentSub() == null) subView.setCues(p.getCurrentCues().cues); // a line already showing
+            loading.setVisibility(p.getPlaybackState() == Player.STATE_BUFFERING ? View.VISIBLE : View.GONE);
+        } else {
+            try {
+                p.setPlaybackParameters(new PlaybackParameters(engine.speed));
+                p.setRepeatMode(Player.REPEAT_MODE_OFF);
+                p.setWakeMode(r.stream ? C.WAKE_MODE_NETWORK : C.WAKE_MODE_LOCAL);
+                // opened at the resume point even when asking: "이어서 재생" then starts at once
+                engine.open(r, resume);
+            } catch (RuntimeException e) {
+                showFatal("이 주소나 파일을 열 수 없습니다.\n\n(" + e.getClass().getSimpleName() + ")");
+                return;
+            }
         }
         p.setPlayWhenReady(!ask);
         if (ask) showResumeDialog(resume);
@@ -665,7 +765,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         updateDecoderChip();
         updateNavButtons();
         updateSpeedChip();
-        applyOrientation(r.widthHint, r.heightHint);
+        applyOrientation(w, hgt);
         showControls();
         loadSubtitlesAsync(r);
     }
@@ -675,7 +775,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         AlertDialog.Builder b = new AlertDialog.Builder(this)
                 .setTitle("재생할 수 없음")
                 .setMessage(msg)
-                .setNegativeButton("닫기", (d, w) -> { closing = true; finish(); })
+                .setNegativeButton("닫기", (d, w) -> exitPlayer())
                 .setCancelable(false);
         if (engine.hasNext()) b.setPositiveButton("다음 파일", (d, w) -> skip(1));
         showImmersive(b.create());
@@ -685,8 +785,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         ExoPlayer p = engine.player();
         MediaRef r = engine.current();
         if (p == null || r == null) {
-            closing = true;
-            finish();
+            exitPlayer();
             return;
         }
         if (PlaybackService.isRunning()) PlaybackService.stop(this);
@@ -712,21 +811,23 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("이어서 재생")
                 .setMessage("마지막으로 본 위치(" + Util.time(pos) + ")부터 이어서 재생할까요?")
-                .setPositiveButton("이어서 재생", (x, w) -> {
-                    ExoPlayer p = engine.player();
-                    if (p != null) { p.seekTo(pos); p.play(); }
-                })
+                .setPositiveButton("이어서 재생", (x, w) -> resumeAt(pos))
                 .setNegativeButton("처음부터", (x, w) -> {
                     ExoPlayer p = engine.player();
                     if (p != null) { p.seekTo(0); p.play(); }
                 })
-                .setOnCancelListener(x -> {
-                    ExoPlayer p = engine.player();
-                    if (p != null) { p.seekTo(pos); p.play(); }
-                })
+                .setOnCancelListener(x -> resumeAt(pos))
                 .create();
         resumeDialog = d;
         showImmersive(d);
+    }
+
+    /** The item was opened at (with fast seek: up to 2 s before) the resume point: just play. */
+    private void resumeAt(long pos) {
+        ExoPlayer p = engine.player();
+        if (p == null) return;
+        if (Math.abs(p.getCurrentPosition() - pos) > PlayerEngine.SNAP_BEFORE_MS + 1000) p.seekTo(pos);
+        p.play();
     }
 
     // ------------------------------------------------------------------ player events
@@ -788,7 +889,8 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
 
     private void onEnded() {
         ExoPlayer p = engine.player();
-        if (p == null || p.getPlaybackState() != Player.STATE_ENDED || isDestroyed()) return;
+        // a closing screen (or one a newer screen took over from) must not move the playlist on
+        if (p == null || p.getPlaybackState() != Player.STATE_ENDED || isDestroyed() || isFinishing() || superseded()) return;
         engine.savePosition();
         if (engine.repeatMode == PlayerEngine.REPEAT_ONE) {
             p.seekTo(0);
@@ -798,8 +900,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         if (engine.sleepAtEnd) {
             engine.sleepAtEnd = false;
             Util.toast(this, "수면 타이머: 재생을 마쳤습니다");
-            closing = true;
-            finish();
+            exitPlayer();
             return;
         }
         boolean auto = Prefs.bool(this, Prefs.AUTOPLAY, true) || engine.repeatMode == PlayerEngine.REPEAT_ALL;
@@ -813,8 +914,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
             startCurrent(false);
             return;
         }
-        closing = true;
-        finish();
+        exitPlayer();
     }
 
     private void handleError(PlaybackException e) {
@@ -837,7 +937,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         AlertDialog.Builder b = new AlertDialog.Builder(this)
                 .setTitle("재생 오류")
                 .setMessage(msg + "\n\n(" + e.getErrorCodeName() + ")")
-                .setNegativeButton("닫기", (d, w) -> { closing = true; finish(); })
+                .setNegativeButton("닫기", (d, w) -> exitPlayer())
                 .setCancelable(false);
         if (!decoder || engine.isSw()) {
             b.setNeutralButton(engine.isSw() ? "HW로 재시도" : "SW로 재시도", (d, w) -> switchDecoder(!engine.isSw(), true));

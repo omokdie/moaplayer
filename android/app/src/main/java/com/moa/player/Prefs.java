@@ -39,6 +39,20 @@ public final class Prefs {
     public static final String AUTO_UPDATE = "auto_update";
     public static final String UPDATE_LAST_CHECK = "update_last_check";
     public static final String UPDATE_SKIPPED = "update_skipped";
+    // self-update state (UpdateInstaller)
+    public static final String UPDATE_READY = "update_ready";               // version of the downloaded, checked APK
+    public static final String UPDATE_READY_NOTES = "update_ready_notes";
+    public static final String UPDATE_INSTALLING = "update_installing";     // version handed to Android's installer
+    public static final String UPDATE_SILENT = "update_silent";             // ... without asking (Android 12+)
+    public static final String UPDATE_SILENT_TRIES = "update_silent_tries"; // "version:count"
+    public static final String UPDATE_DONE = "update_done";                 // installed: say so once on the next start
+    public static final String UPDATE_ERROR = "update_error";               // version whose problem is explained once
+    public static final String UPDATE_BLOCKED = "update_blocked";           // version that can never install here
+    public static final String UPDATE_BLOCKED_KIND = "update_blocked_kind"; // signer / incompatible / old / invalid
+    public static final String UPDATE_READY_TARGET = "update_ready_target"; // targetSdk of the downloaded APK
+    public static final String UPDATE_READY_AT = "update_ready_at";
+    public static final String UPDATE_LATER_AT = "update_later_at";         // "나중에" pressed
+    public static final String UPDATE_INSTALL_AT = "update_install_at";     // an install was started
 
     public static SharedPreferences sp(Context c) {
         return PreferenceManager.getDefaultSharedPreferences(c.getApplicationContext());
