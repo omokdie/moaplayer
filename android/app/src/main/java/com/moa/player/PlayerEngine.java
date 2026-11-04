@@ -277,7 +277,9 @@ public final class PlayerEngine {
                 .setPreferredAudioLanguage(lang)
                 .setSelectUndeterminedTextLanguage(true)
                 .setExceedRendererCapabilitiesIfNecessary(true)
-                .setExceedVideoConstraintsIfNecessary(true));
+                .setExceedVideoConstraintsIfNecessary(true)
+                // streams (HLS/DASH): allow the original resolution, not only the screen size
+                .clearViewportSizeConstraints());
         AudioAttributes attrs = new AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)

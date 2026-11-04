@@ -62,7 +62,8 @@ tools/                  아이콘 생성, 클라우드 작업 환경용 빌드 �
 
 ## 사용한 구성 요소와 라이선스
 - [Electron](https://www.electronjs.org/) (MIT), [electron-builder / electron-updater](https://www.electron.build/) (MIT)
-- [FFmpeg](https://ffmpeg.org/) (GPL) — Windows 설치본에 [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds)의 GPL 빌드가
-  `resources\ffmpeg`로 들어갑니다. 라이선스 전문은 같은 폴더의 `LICENSE.txt`, 소스는 ffmpeg.org와 BtbN 저장소에서 받을 수 있습니다.
+- [FFmpeg](https://ffmpeg.org/) 8.0 (GPL v2+) + [x264](https://www.videolan.org/developers/x264.html) (GPL) + [dav1d](https://code.videolan.org/videolan/dav1d) (BSD) —
+  Windows 설치본의 `resources\ffmpeg`. [pc/scripts/build-ffmpeg.sh](pc/scripts/build-ffmpeg.sh)로 공식 소스에서 직접 빌드하며,
+  라이선스 전문은 같은 폴더의 `LICENSE.txt`에 있습니다.
 - [AndroidX Media3 ExoPlayer](https://github.com/androidx/media) (Apache 2.0)
 - 'MX Player'는 해당 권리자의 상표이며, 이 프로젝트는 MX Player와 관계가 없습니다. 조작 방식만 참고했습니다.

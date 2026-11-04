@@ -490,7 +490,7 @@
   function nativeVideo(v) {
     if (!v) return true;
     if (v.codec === 'h264') return !/(10|12)(le|be)|422|444/.test(v.pixFmt || '');
-    if (v.codec === 'hevc') return S.hevc;
+    if (v.codec === 'hevc') return S.hevc && (!/1[02](le|be)/.test(v.pixFmt || '') || S.hevc10);
     return ['vp8', 'vp9', 'av1', 'theora'].includes(v.codec);
   }
   const NATIVE_AUDIO = new Set(['aac', 'mp3', 'opus', 'vorbis', 'flac', 'pcm_s16le', 'pcm_s24le', 'pcm_s32le', 'pcm_f32le', 'pcm_u8']);
@@ -522,6 +522,7 @@
     P.seekToken++;
     renderSubsHtml('', false);
     updateAbUi();
+    startSubLoop();
     const title = stripExt(item.name);
     $('#p-title').textContent = title;
     api.invoke('win:setTitle', title);
@@ -602,9 +603,11 @@
     P.swOffset = copy && key != null ? key : target;
     P.swTarget = target;
     const t = copy && target > 0 ? target + 1 : target;   // +1 ms: never fall back to the previous key frame
-    const hmax = v && v.height > 1080 && !copy ? 1080 : 0;
+    // converted pictures keep the original resolution unless the user chose "1080p" for a slow PC
+    const hmax = v && !copy && S.settings.swQuality === '1080' && v.height > 1080 ? 1080 : 0;
+    const px = v && v.width && v.height ? (hmax ? Math.round(v.width * hmax / v.height) * hmax : v.width * v.height) : 0;
     return `moa://stream/?p=${encodeURIComponent(P.item.path)}&t=${Math.round(t)}&a=${P.audioIdx}` +
-      `&v=${copy ? 'copy' : 'enc'}&s=${P.swBurn}&h=${hmax}&hevc=${v && v.codec === 'hevc' ? 1 : 0}&r=${Date.now()}`;
+      `&v=${copy ? 'copy' : 'enc'}&s=${P.swBurn}&h=${hmax}&px=${px}&hevc=${v && v.codec === 'hevc' ? 1 : 0}&r=${Date.now()}`;
   }
   async function streamUrl(startMs) {
     const copy = P.swBurn < 0 && canCopyVideo(P.info);
@@ -652,6 +655,9 @@
   function closePlayer() {
     saveHistory();
     P.token++;
+    P.catchup = false;
+    video.muted = false;
+    video.style.opacity = '';
     api.invoke('media:stopStream');
     video.pause();
     video.removeAttribute('src');
@@ -837,6 +843,7 @@
   });
   video.addEventListener('ratechange', () => { if (!P.catchup) reportPlayerState(); });
   video.addEventListener('ended', onEnded);
+  video.addEventListener('timeupdate', () => { if (P.catchup) checkCatchup(); });
   video.addEventListener('resize', layoutVideo);
   window.addEventListener('resize', () => { layoutVideo(); applySubStyle(); });
 
@@ -850,7 +857,19 @@
     if (P.sleepAt && Date.now() >= P.sleepAt) { P.sleepAt = 0; video.pause(); toast('수면 타이머: 재생을 멈췄습니다'); }
   }, 250);
 
+  // runs every frame while a video is open (subtitles, end of a seek catch-up); idle otherwise
+  let subLoopOn = false;
+  function startSubLoop() {
+    if (subLoopOn) return;
+    subLoopOn = true;
+    requestAnimationFrame(subLoop);
+  }
   function subLoop() {
+    if (!P.item && !P.catchup) {
+      subLoopOn = false;
+      if (P.shownCues) { P.shownCues = ''; renderSubsHtml('', false); }
+      return;
+    }
     if (P.catchup) checkCatchup();
     if (P.item && P.subSel >= 0 && P.subTracks[P.subSel]) {
       const t = P.subTracks[P.subSel];
@@ -870,7 +889,6 @@
     }
     requestAnimationFrame(subLoop);
   }
-  requestAnimationFrame(subLoop);
 
   function renderSubsHtml(html, top) {
     const s = $('#subs');
@@ -1782,6 +1800,8 @@
       addSwitch(body, '다음 동영상 자동 재생', S.settings.autoplayNext !== false, (on) => set({ autoplayNext: on }));
       addSelect(body, '탐색 간격 (더블클릭·방향키)', [5, 10, 15, 20, 30, 60].map((s) => [s, s + '초']), S.settings.seekSeconds || 10, (v) => set({ seekSeconds: Number(v) }));
       addSwitch(body, '빠른 탐색 (건너뛸 때 가까운 키프레임으로 바로 이동)', S.settings.fastSeek !== false, (on) => set({ fastSeek: on }));
+      addSelect(body, 'SW 디코더 화질 (변환이 필요한 영상)', [['original', '원본 해상도 그대로 (권장)'], ['1080', '1080p로 낮춤 (느린 PC에서 끊길 때)']],
+        S.settings.swQuality || 'original', (v) => set({ swQuality: v }));
       addSelect(body, '한 번 클릭', [['mx', '컨트롤 표시/숨기기 (MX 방식)'], ['play', '재생/일시정지']], S.settings.singleClick || 'mx', (v) => set({ singleClick: v }));
       addSelect(body, '가운데 더블클릭', [['mx', '재생/일시정지 (MX 방식)'], ['fullscreen', '전체 화면']], S.settings.doubleClick || 'mx', (v) => set({ doubleClick: v }));
       addSelect(body, '마우스 휠', [['volume', '볼륨'], ['seek', '5초 탐색']], S.settings.wheel || 'volume', (v) => set({ wheel: v }));
@@ -2019,6 +2039,9 @@
     api.on('media-command', mediaCommand);
   }
 
+  function supportsType(t) {
+    try { return (window.MediaSource && MediaSource.isTypeSupported(t)) || video.canPlayType(t) === 'probably'; } catch (e) { return false; }
+  }
   function detectHevc() {
     if (S.settings.hevcNative === 'on') return true;
     if (S.settings.hevcNative === 'off') return false;
@@ -2032,6 +2055,7 @@
     wire();
     [S.settings, S.info] = await Promise.all([api.invoke('settings:get'), api.invoke('app:info')]);
     S.hevc = detectHevc();
+    S.hevc10 = S.hevc && S.settings.hevcNative !== 'off' && (S.settings.hevcNative === 'on' || supportsType('video/mp4; codecs="hvc1.2.4.L153.B0"'));
     P.volume = typeof S.settings.volume === 'number' ? S.settings.volume : 1;
     applyVolume();
     applySubStyle();

@@ -11,14 +11,20 @@ MX Player와 같은 방식으로 쓰는 PC용 동영상 플레이어입니다. �
 ## 빌드 (Windows)
 
 1. [Node.js 22 LTS](https://nodejs.org/) 설치
-2. 명령 프롬프트 / PowerShell에서
+2. FFmpeg를 `pc\ffmpeg\`에 넣습니다. 배포판은 **`scripts/build-ffmpeg.sh`로 만든 작은 빌드**(약 30MB: 내장 디코더·디먹서 전부 +
+   dav1d(AV1) + x264, 앱이 쓰는 인코더·필터만)를 GitHub Actions가 Ubuntu에서 mingw-w64로 빌드해 넣습니다
+   (Actions → Build Windows installer의 `ffmpeg-win64` 아티팩트). 직접 빌드하기 번거로우면 `npm run fetch-ffmpeg`로
+   BtbN 전체 빌드(약 185MB)를 받아도 똑같이 동작합니다.
+3. 명령 프롬프트 / PowerShell에서
    ```bat
    cd pc
    npm install
-   npm run fetch-ffmpeg     :: FFmpeg(BtbN GPL 공유 빌드)를 pc\ffmpeg 에 받음 (처음 한 번)
    npm run dist:win
    ```
-3. 결과: `pc\dist\MoaPlayer-Setup-<버전>.exe` (같은 폴더의 `latest.yml`, `*.blockmap`은 자동 업데이트용)
+4. 결과: `pc\dist\MoaPlayer-Setup-<버전>.exe` (같은 폴더의 `latest.yml`, `*.blockmap`은 자동 업데이트용)
+
+용량을 줄이는 설정(`package.json` → `build`): 언어 파일은 한국어·영어만(`electronLanguages`), WebGPU 셰이더 컴파일러
+`dxcompiler.dll` 제외(`scripts/after-pack.cjs`), 최대 압축(`compression: maximum`).
 
 개발 중 바로 실행: `npm start` (`pc\ffmpeg` 또는 PATH의 FFmpeg 사용).
 실행 옵션: `--moa-library=<폴더>`(라이브러리 폴더 지정), `--moa-userdata=<폴더>`(설정 저장 위치).
@@ -28,7 +34,8 @@ MX Player와 같은 방식으로 쓰는 PC용 동영상 플레이어입니다. �
 | 항목 | 위치 / 동작 |
 |---|---|
 | 프로그램 | `%LOCALAPPDATA%\Programs\MoaPlayer\MoaPlayer.exe` (사용자별 설치, 관리자 권한 불필요, 설치 위치 변경 가능) |
-| FFmpeg | `<설치 폴더>\resources\ffmpeg\` (`ffmpeg.exe`, `ffprobe.exe`, DLL, `LICENSE.txt`) |
+| FFmpeg | `<설치 폴더>\resources\ffmpeg\` (`ffmpeg.exe`, `ffprobe.exe`, DLL, `LICENSE.txt`) — `scripts/build-ffmpeg.sh`의 작은 빌드 |
+| 화질 | HW: 원본 그대로. SW 복사(영상은 재생 가능, 음성만 변환): 원본 그대로. SW 변환(10비트 H.264, DivX·WMV 등): 원본 해상도, x264 CRF 17(눈으로 구분 어려운 화질), 4K는 빠른 프리셋. 설정 → SW 디코더 화질에서 1080p로 낮출 수 있음 |
 | 바로가기 | 시작 메뉴·바탕화면 '모아 플레이어' |
 | 파일 연결 | mp4 mkv avi mov wmv flv webm m2ts mts mpg mpeg vob 3gp ogv rm rmvb asf divx f4v tp trp → ProgID `MoaPlayer.Video`. 탐색기 "연결 프로그램"에 표시되고, 기본 앱이 정해져 있지 않은 형식은 더블클릭하면 바로 재생됩니다 |
 | 설정·기록·썸네일 | `%APPDATA%\MoaPlayer\` (제거해도 남음) |
@@ -51,7 +58,8 @@ renderer/        화면 (app.js: 라이브러리·플레이어·제스처·단�
 assets/          창 아이콘, 작업 표시줄 버튼 아이콘(thumbar/ 어두운 작업 표시줄용, thumbar/light/ 밝은 작업 표시줄용
                  — tools/make-thumbar-icons.py)
 build/           설치 프로그램 아이콘 (electron-builder buildResources)
-scripts/         sync-version.mjs (../version.json → package.json), fetch-ffmpeg.ps1
+scripts/         sync-version.mjs (../version.json → package.json), build-ffmpeg.sh (배포용 작은 FFmpeg),
+                 after-pack.cjs (설치본에서 dxcompiler.dll 제외), fetch-ffmpeg.ps1 (개발용 전체 FFmpeg)
 tests/           Playwright UI 테스트 (Linux + Xvfb) — 아래 참고
 ```
 
@@ -59,6 +67,7 @@ tests/           Playwright UI 테스트 (Linux + Xvfb) — 아래 참고
 ```bash
 bash tests/make-testmedia.sh /tmp/moa-testmedia        # ffmpeg로 테스트 동영상 생성
 npm i --no-save playwright-core electron
-export MOA_TESTMEDIA=/tmp/moa-testmedia MOA_SHOTS=/tmp/moa-shots
+TARGET=linux bash scripts/build-ffmpeg.sh /tmp/ffmin                # 배포판과 같은 구성의 FFmpeg (Linux용)
+export MOA_FFMPEG_DIR=/tmp/ffmin MOA_TESTMEDIA=/tmp/moa-testmedia MOA_SHOTS=/tmp/moa-shots
 xvfb-run -a -s "-screen 0 1366x800x24" node tests/smoke.js      # formats, gestures, screens, audiotracks 도 같은 방식
 ```

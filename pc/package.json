@@ -30,6 +30,12 @@
     "productName": "MoaPlayer",
     "copyright": "Copyright © 2026 Moa Player",
     "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "ko",
+      "en-US"
+    ],
+    "afterPack": "scripts/after-pack.cjs",
     "directories": {
       "output": "dist",
       "buildResources": "build"

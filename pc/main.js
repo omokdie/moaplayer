@@ -45,7 +45,7 @@ const settings = new JsonStore(path.join(USER, 'settings.json'), {
   gestureSeek: true, gestureVolume: true, gestureBrightness: true, gestureZoom: true, longPressSpeed: true,
   wheel: 'volume', volume: 1, boost: true, subSize: 100, subColor: '#ffffff', subOutline: true, subBg: false,
   subBottom: 6, subEncoding: 'auto', sort: 'name', sortDesc: false, view: 'grid', showThumbs: true,
-  hevcNative: 'auto', alwaysOnTop: false, bounds: null, autoUpdate: true, updatePending: null, fastSeek: true,
+  hevcNative: 'auto', alwaysOnTop: false, bounds: null, autoUpdate: true, updatePending: null, fastSeek: true, swQuality: 'original',
 });
 const history = new JsonStore(path.join(USER, 'history.json'), { items: {} });
 const meta = new JsonStore(path.join(USER, 'meta.json'), { items: {} });
@@ -170,6 +170,7 @@ function handleStream(u) {
     file, start: Number(u.searchParams.get('t') || 0), audio: Number(u.searchParams.get('a') || 0),
     videoCopy: u.searchParams.get('v') === 'copy', burnSub: Number(u.searchParams.get('s') ?? -1),
     hevcTag: u.searchParams.get('hevc') === '1', maxHeight: Number(u.searchParams.get('h') || 0),
+    pixels: Number(u.searchParams.get('px') || 0),
   });
   activeStream = proc;
   let err = '';
@@ -217,6 +218,8 @@ async function probeCached(p) {
   if (probeWaiters.has(key)) return probeWaiters.get(key);
   const job = ff.probe(p).then((info) => {
     meta.data.items[key] = info;
+    const keys = Object.keys(meta.data.items);
+    if (keys.length > 6000) for (const k of keys.slice(0, 1000)) delete meta.data.items[k];   // oldest first
     meta.save();
     probeWaiters.delete(key);
     return info;
@@ -247,7 +250,11 @@ async function thumbFor(p) {
   const st = await fs.promises.stat(p);
   const key = fileKey(p, st);
   const out = path.join(THUMBS, key + '.jpg');
-  if (fs.existsSync(out)) return `moa://thumb/?k=${key}`;
+  if (fs.existsSync(out)) {
+    const now = new Date();
+    fs.promises.utimes(out, now, now).catch(() => {});   // keeps it in the cache (pruneCache drops unused ones)
+    return `moa://thumb/?k=${key}`;
+  }
   return enqueueThumb(async () => {
     let dur = 0;
     try { dur = (await probeCached(p)).duration; } catch (e) { /* ignore */ }
@@ -543,8 +550,28 @@ function updateThumbar(st) {
 }
 
 // ---------------------------------------------------------------- lifecycle
+// Thumbnails and extracted subtitles are only caches: drop what has not been used for a long time and
+// keep the folders small (a large library would otherwise grow them without limit).
+async function pruneCache(dir, maxAgeDays, maxBytes) {
+  let names;
+  try { names = await fs.promises.readdir(dir); } catch (e) { return; }
+  const files = [];
+  for (const n of names) {
+    try { const st = await fs.promises.stat(path.join(dir, n)); if (st.isFile()) files.push({ n, t: st.mtimeMs, s: st.size }); } catch (e) { /* gone */ }
+  }
+  const old = Date.now() - maxAgeDays * 86400000;
+  files.sort((a, b) => a.t - b.t);
+  let total = files.reduce((a, f) => a + f.s, 0);
+  for (const f of files) {
+    if (f.t >= old && total <= maxBytes) break;
+    await fs.promises.unlink(path.join(dir, f.n)).catch(() => {});
+    total -= f.s;
+  }
+}
+
 app.whenReady().then(async () => {
   if (!gotLock) return;
+  setTimeout(() => { pruneCache(THUMBS, 120, 200 * 1048576); pruneCache(SUBCACHE, 60, 50 * 1048576); }, 60000);
   nativeTheme.themeSource = 'dark';   // dark window frame / title bar to match the app
   nativeTheme.on('updated', () => { thumbKey = ''; updateThumbar(thumbState); });   // Windows light/dark mode switched
   protocol.handle('moa', handleMoa);

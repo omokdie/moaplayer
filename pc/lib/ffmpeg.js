@@ -107,7 +107,6 @@ async function thumbnail(file, out, durationMs) {
   return fs.existsSync(out);
 }
 
-/** Time (ms) of the video key frame at or before `ms` — where a stream-copy seek really starts. */
 /**
  * Key frames of the first video stream around `ms`: one quick ffprobe pass that seeks (via the
  * container index) to the key frame at or before ms-before and reads packets up to ms+after.
@@ -141,14 +140,17 @@ async function extractSubtitle(file, subIndex) {
  * Builds the ffmpeg arguments for the SW (software decoding) stream: decode with FFmpeg and
  * re-encode to H.264/AAC fragmented MP4 that the built-in player can always show.
  */
-function streamArgs({ file, start = 0, audio = 0, videoCopy = false, burnSub = -1, hevcTag = false, maxHeight = 0 }) {
+// High-quality conversion of pixel formats (10-bit -> 8-bit, 4:2:2/4:4:4 -> 4:2:0) and of any resize.
+const SWS_FLAGS = 'bicubic+accurate_rnd+full_chroma_int';
+
+function streamArgs({ file, start = 0, audio = 0, videoCopy = false, burnSub = -1, hevcTag = false, maxHeight = 0, pixels = 0 }) {
   const args = ['-hide_banner', '-loglevel', 'error', '-nostdin'];
   if (start > 0) args.push('-ss', (start / 1000).toFixed(3));
   args.push('-i', file);
   let vf = [];
   if (burnSub >= 0) {
     const scale = maxHeight > 0 ? `,scale=-2:'min(${maxHeight},ih)'` : '';
-    args.push('-filter_complex', `[0:v:0][0:s:${burnSub}]overlay${scale},format=yuv420p[v]`, '-map', '[v]');
+    args.push('-filter_complex', `sws_flags=${SWS_FLAGS};[0:v:0][0:s:${burnSub}]overlay${scale},format=yuv420p[v]`, '-map', '[v]');
     videoCopy = false;
   } else {
     args.push('-map', '0:v:0?');
@@ -163,8 +165,12 @@ function streamArgs({ file, start = 0, audio = 0, videoCopy = false, burnSub = -
     if (hevcTag) args.push('-tag:v', 'hvc1');
   } else {
     if (vf.length) args.push('-vf', vf.join(','));
-    // zerolatency: no look-ahead / B-frames, so the first picture comes out right after a seek
-    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '20', '-g', '48', '-bf', '0');
+    // The picture is only re-encoded because the built-in player cannot decode it (DivX/XviD, WMV, MPEG-2,
+    // 10-bit H.264, ...). It never leaves the PC, so spend bits, not quality: CRF 17 is visually lossless.
+    // Above 1080p a faster preset keeps it real-time (same quality at that CRF, just a bigger stream).
+    // zerolatency: no look-ahead / B-frames, so the first picture comes out right after a seek.
+    const preset = pixels > 2500000 ? 'superfast' : 'veryfast';
+    args.push('-sws_flags', SWS_FLAGS, '-c:v', 'libx264', '-preset', preset, '-tune', 'zerolatency', '-crf', '17', '-g', '48', '-bf', '0');
   }
   args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000', '-sn', '-dn',
     '-max_muxing_queue_size', '4096', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',

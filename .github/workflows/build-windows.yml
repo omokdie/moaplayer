@@ -1,6 +1,7 @@
 name: Build Windows installer
 
 # Builds pc/dist/MoaPlayer-Setup-<ver>.exe (+ latest.yml, .blockmap) with FFmpeg inside.
+# FFmpeg is our own small build (pc/scripts/build-ffmpeg.sh, cross-compiled on Ubuntu, cached by script hash).
 # Called from release.yml with a tag, the files are attached to that GitHub Release, which is the
 # electron-updater feed of installed copies.  Manual runs only produce workflow artifacts.
 
@@ -18,7 +19,38 @@ permissions:
   contents: write
 
 jobs:
+  ffmpeg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cached FFmpeg build
+        id: cache
+        uses: actions/cache@v5
+        with:
+          path: ffmpeg-win64
+          key: ffmpeg-win64-${{ hashFiles('pc/scripts/build-ffmpeg.sh') }}
+
+      - name: Build FFmpeg for Windows (mingw-w64)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends mingw-w64 nasm pkg-config meson ninja-build
+          TARGET=win64 WORK="$RUNNER_TEMP/ffwork" bash pc/scripts/build-ffmpeg.sh "$GITHUB_WORKSPACE/ffmpeg-win64"
+
+      - name: Size
+        run: du -sh ffmpeg-win64 && ls -la ffmpeg-win64
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ffmpeg-win64
+          path: ffmpeg-win64
+          if-no-files-found: error
+          retention-days: 3
+
   windows:
+    needs: ffmpeg
     runs-on: windows-latest
     defaults:
       run:
@@ -36,9 +68,28 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
-      - name: Download FFmpeg (SW decoder, thumbnails, embedded subtitles)
+      - name: FFmpeg (SW decoder, thumbnails, embedded subtitles)
+        uses: actions/download-artifact@v6
+        with:
+          name: ffmpeg-win64
+          path: pc/ffmpeg
+
+      - name: Check FFmpeg runs on Windows
         shell: pwsh
-        run: ./scripts/fetch-ffmpeg.ps1
+        working-directory: pc
+        run: |
+          foreach ($tool in 'ffmpeg.exe', 'ffprobe.exe') {
+            $out = & ".\ffmpeg\$tool" -hide_banner -version
+            if ($LASTEXITCODE -ne 0) { throw "$tool does not run (exit $LASTEXITCODE)" }
+            Write-Host ($out | Select-Object -First 1)
+          }
+          $enc = & .\ffmpeg\ffmpeg.exe -hide_banner -encoders
+          if (-not ($enc -match 'libx264')) { throw 'libx264 encoder missing' }
+          $dec = & .\ffmpeg\ffmpeg.exe -hide_banner -decoders
+          foreach ($d in 'h264', 'hevc', 'mpeg4', 'ac3', 'dca', 'libdav1d', 'pgssub', 'wmv3', 'rv40') {
+            if (-not ($dec -match " $d ")) { throw "decoder $d missing" }
+          }
+          Write-Host ("FFmpeg: {0:N1} MB" -f ((Get-ChildItem ffmpeg | Measure-Object Length -Sum).Sum / 1MB))
 
       - name: Sync version from version.json
         run: npm run sync-version
@@ -72,7 +123,9 @@ jobs:
           cat "$R/app-update.yml"
           "$R/ffmpeg/ffprobe.exe" -hide_banner -version > ffprobe-version.txt
           head -n 1 ffprobe-version.txt
-          du -sh "$R/ffmpeg" dist/*.exe
+          du -sh dist/win-unpacked "$R/ffmpeg" dist/*.exe
+          ls dist/win-unpacked/locales
+          test ! -f dist/win-unpacked/dxcompiler.dll || { echo "::error::dxcompiler.dll should have been removed by after-pack"; exit 1; }
 
       - uses: actions/upload-artifact@v6
         with:
