@@ -24,7 +24,8 @@ MX Player와 같은 방식으로 쓰는 PC용 동영상 플레이어입니다. �
 4. 결과: `pc\dist\MoaPlayer-Setup-<버전>.exe` (같은 폴더의 `latest.yml`, `*.blockmap`은 자동 업데이트용)
 
 용량을 줄이는 설정(`package.json` → `build`): 언어 파일은 한국어·영어만(`electronLanguages`), WebGPU 셰이더 컴파일러
-`dxcompiler.dll` 제외(`scripts/after-pack.cjs`), 최대 압축(`compression: maximum`).
+`dxcompiler.dll` 제외(`scripts/after-pack.cjs`), 최대 압축(`compression: maximum`). 결과: 설치 파일 약 115MB, 설치 후 약 310MB
+(1.2.0까지는 180MB / 545MB). 자동 업데이트는 `.blockmap`으로 바뀐 부분만 내려받습니다.
 
 개발 중 바로 실행: `npm start` (`pc\ffmpeg` 또는 PATH의 FFmpeg 사용).
 실행 옵션: `--moa-library=<폴더>`(라이브러리 폴더 지정), `--moa-userdata=<폴더>`(설정 저장 위치).
