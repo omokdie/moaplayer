@@ -11,6 +11,9 @@
 | 2 | 같은 방식의 PC 프로그램 | ✅ Electron 45 + FFmpeg. HW(Chromium)/SW(FFmpeg 변환 스트림) 디코더, 같은 제스처와 단축키 |
 | 3 | Windows 버전을 "윈도우 앱 형태"로 | ✅ NSIS 설치 프로그램(시작 메뉴·바탕화면 바로가기, 앱 목록에서 제거, 설치 위치 선택), 동영상 파일 연결, 자동 업데이트, 어두운 제목 표시줄, 작업 표시줄 ⏮⏯⏭ 버튼, 미디어 키, 점프 목록 |
 | 4 | JSE처럼 GitHub에 올리기 | ✅ 저장소 구성·Actions·Releases를 `omokdie/jse`와 같은 방식으로 (`version.json` 올려 main push → 자동 릴리스) |
+| 5 | 영상 스킵할 때 딜레이 | ✅ 1.2.0 "빠른 탐색": 건너뛰기가 ±min(간격/2, 5초) 안의 키프레임으로 바로 이동. PC: `media:keyframes`(ffprobe 창 읽기, 캐시) + HW 긴 GOP 감지, SW 복사 모드는 따라잡기 없이 키프레임에서 시작, 연속 입력 합치기, fMP4 `-frag_duration`·x264 zerolatency. Android: `SeekParameters(tol, tol)` + 연속 탭 기준점 고정. Linux 측정: 긴 GOP HW 0.5–0.9→0.2초, SW 복사 0.5–2.5→0.3–0.5초 |
+| 6 | 폴더 이름 변경·삭제 | ✅ PC: 폴더 오른쪽 클릭/⋮ (`lib:renameFolder`, `lib:deleteFolder` — 동영상+같은 이름 자막을 휴지통으로, 빈 폴더면 폴더도, Windows 기본 폴더 보호, 기록·라이브러리 경로 갱신). Android: 폴더 길게 누르기 (모든 파일 접근 권한 있으면 파일 API, 없으면 MediaStore 삭제 요청; 이름 변경은 권한 필요) |
+| 7 | GitHub 작업은 사이트를 열어 직접 | ✅ 내장 브라우저로 진행. 단, 비밀번호·서명 키 값 입력은 Claude가 할 수 없어 사용자가 붙여 넣음 |
 
 이름: 'MX Player' 이름·로고는 쓰지 않고 "모아 플레이어 / MoaPlayer"로 만들었습니다. 패키지 `com.moa.player`, Windows appId 동일.
 

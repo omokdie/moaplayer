@@ -158,6 +158,8 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     private float zoomStart, panX, panY;
     private boolean longPressActive;
     private int chainSeconds, chainDir;
+    private long chainBase;
+    private boolean fastSeek = true;
     private long lastSave;
     private String loadedSubsFor;
     private String warnedTracksFor;
@@ -522,6 +524,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         String dt = Prefs.str(this, Prefs.DOUBLE_TAP, "seek");
         dtMode = "play_pause".equals(dt) ? 1 : ("off".equals(dt) ? 2 : 0);
         seekSec = Math.max(1, Prefs.intOf(this, Prefs.SEEK_SEC, 10));
+        fastSeek = Prefs.bool(this, Prefs.FAST_SEEK, true);
     }
 
     private void applySubtitleStyle() {
@@ -1024,10 +1027,30 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
     private void seekBy(long deltaMs) {
         ExoPlayer p = engine.player();
         if (p == null) return;
+        skipTo(p.getCurrentPosition() + deltaMs, deltaMs);
+    }
+
+    /**
+     * A skip by a fixed step (double tap, keys). With "빠른 탐색" the player may land on a key frame
+     * within half a step (at most 5 s) of the target: that jump is immediate, while an exact position
+     * has to decode everything from the previous key frame first (slow for long key-frame intervals,
+     * e.g. downloaded MKV files). The window never reaches back past the starting point.
+     */
+    private void skipTo(long target, long step) {
+        ExoPlayer p = engine.player();
+        if (p == null) return;
         long dur = p.getDuration();
-        long t = p.getCurrentPosition() + deltaMs;
-        if (dur > 0 && dur != C.TIME_UNSET) t = Math.min(t, dur - 500);
-        p.seekTo(Math.max(0, t));
+        if (dur > 0 && dur != C.TIME_UNSET) target = Math.min(target, dur - 500);
+        target = Math.max(0, target);
+        if (fastSeek) {
+            long tolUs = Math.min(5000L, Math.abs(step) / 2) * 1000L;
+            p.setSeekParameters(new SeekParameters(tolUs, tolUs));
+            p.seekTo(target);
+            p.setSeekParameters(SeekParameters.EXACT);   // later seeks (A-B, resume, seek bar) stay exact
+        } else {
+            p.setSeekParameters(SeekParameters.EXACT);
+            p.seekTo(target);
+        }
     }
 
     private void liveSeek(ExoPlayer p, long target) {
@@ -1182,9 +1205,11 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
             return;
         }
         if (chainDir != zone) chainSeconds = 0;
+        if (chainSeconds == 0) chainBase = p.getCurrentPosition();
         chainDir = zone;
         chainSeconds += seekSec;
-        seekBy(zone * seekSec * 1000L);
+        // every tap of a chain counts from where the chain started, so landing on a key frame never drifts
+        skipTo(chainBase + zone * chainSeconds * 1000L, zone * seekSec * 1000L);
         int w = (int) (findViewById(R.id.root).getWidth() * 0.36f);
         TextView tv = zone < 0 ? seekLeft : seekRight;
         TextView other = zone < 0 ? seekRight : seekLeft;

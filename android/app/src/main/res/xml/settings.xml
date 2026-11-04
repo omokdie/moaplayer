@@ -23,6 +23,8 @@
             android:entries="@array/doubletap_entries" android:entryValues="@array/doubletap_values" android:defaultValue="seek"/>
         <ListPreference android:key="seek_seconds" android:title="더블 탭 탐색 간격" android:summary="%s"
             android:entries="@array/seeksec_entries" android:entryValues="@array/seeksec_values" android:defaultValue="10"/>
+        <SwitchPreference android:key="fast_seek" android:title="빠른 탐색"
+            android:summary="건너뛸 때 가까운 키프레임으로 바로 이동 (끄면 정확한 위치로 이동하지만 느릴 수 있음)" android:defaultValue="true"/>
         <SwitchPreference android:key="long_press_speed" android:title="길게 눌러 2배속" android:summary="화면을 누르고 있는 동안 2배속 재생" android:defaultValue="true"/>
         <SwitchPreference android:key="volume_boost" android:title="볼륨 부스트" android:summary="최대 볼륨 이상으로 키우기 (음량 증폭)" android:defaultValue="true"/>
         <SwitchPreference android:key="remember_brightness" android:title="밝기 기억" android:summary="플레이어에서 조절한 밝기를 다음에도 사용" android:defaultValue="false"/>

@@ -45,7 +45,7 @@ const settings = new JsonStore(path.join(USER, 'settings.json'), {
   gestureSeek: true, gestureVolume: true, gestureBrightness: true, gestureZoom: true, longPressSpeed: true,
   wheel: 'volume', volume: 1, boost: true, subSize: 100, subColor: '#ffffff', subOutline: true, subBg: false,
   subBottom: 6, subEncoding: 'auto', sort: 'name', sortDesc: false, view: 'grid', showThumbs: true,
-  hevcNative: 'auto', alwaysOnTop: false, bounds: null, autoUpdate: true, updatePending: null,
+  hevcNative: 'auto', alwaysOnTop: false, bounds: null, autoUpdate: true, updatePending: null, fastSeek: true,
 });
 const history = new JsonStore(path.join(USER, 'history.json'), { items: {} });
 const meta = new JsonStore(path.join(USER, 'meta.json'), { items: {} });
@@ -314,6 +314,108 @@ handle('lib:addFolderPath', async (p) => {
   settings.save();
   return settings.data;
 });
+// ---------------------------------------------------------------- folder rename / delete
+const samePath = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+const insidePath = (p, dir) => {
+  const d = dir.endsWith(path.sep) ? dir : dir + path.sep;
+  return process.platform === 'win32' ? p.toLowerCase().startsWith(d.toLowerCase()) : p.startsWith(d);
+};
+/** Drive roots, the user's standard folders and system/program folders are never renamed or removed. */
+function protectedFolder(dir) {
+  const d = path.resolve(dir);
+  if (path.parse(d).root === d) return true;
+  const special = ['home', 'desktop', 'documents', 'downloads', 'music', 'pictures', 'videos', 'appData', 'userData', 'temp']
+    .map((k) => { try { return app.getPath(k); } catch (e) { return null; } });
+  special.push(path.dirname(process.execPath), process.env.SystemRoot, process.env.ProgramFiles, process.env['ProgramFiles(x86)'],
+    process.env.ProgramData, process.env.LOCALAPPDATA, process.env.APPDATA, process.env.USERPROFILE);
+  for (const s of special.filter(Boolean).map((x) => path.resolve(x))) {
+    if (samePath(d, s)) return true;
+  }
+  for (const s of [process.env.SystemRoot, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramData,
+    path.dirname(process.execPath), app.getPath('appData')].filter(Boolean).map((x) => path.resolve(x))) {
+    if (insidePath(d, s)) return true;
+  }
+  return false;
+}
+function folderNameError(name) {
+  if (!name) return '폴더 이름을 입력하세요';
+  if (/[\\/:*?"<>|\u0000-\u001f]/.test(name)) return '폴더 이름에는 \\ / : * ? " < > | 를 쓸 수 없습니다';
+  if (/[. ]$/.test(name)) return '폴더 이름은 마침표나 공백으로 끝날 수 없습니다';
+  if (/^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i.test(name)) return 'Windows에서 쓸 수 없는 폴더 이름입니다';
+  if (name.length > 200) return '폴더 이름이 너무 깁니다';
+  return '';
+}
+async function retry(fn, times = 4) {
+  for (let i = 0; ; i++) {
+    try { return await fn(); } catch (e) {
+      if (i >= times - 1 || !['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));   // a thumbnail/probe job may still hold a file
+    }
+  }
+}
+/** Library folders, playback history and the recent list follow a renamed folder. */
+function remapFolder(from, to) {
+  const map = (p) => (samePath(p, from) ? to : insidePath(p, from) ? to + p.slice(from.length) : p);
+  settings.data.folders = Array.from(new Set((settings.data.folders || []).map(map)));
+  settings.save();
+  const items = {};
+  for (const [k, v] of Object.entries(history.data.items)) items[map(k)] = v;
+  history.data.items = items;
+  history.save();
+}
+handle('lib:renameFolder', async (dir, newName) => {
+  const name = String(newName || '').trim();
+  const bad = folderNameError(name);
+  if (bad) throw new Error(bad);
+  if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error('폴더를 찾을 수 없습니다');
+  if (protectedFolder(dir)) throw new Error('Windows 기본 폴더(바탕 화면·다운로드·동영상 등)는 이름을 바꿀 수 없습니다');
+  const target = path.join(path.dirname(dir), name);
+  if (target === dir) return dir;
+  if (fs.existsSync(target) && !samePath(target, dir)) throw new Error('같은 이름의 폴더가 이미 있습니다');
+  stopStream();
+  try {
+    await retry(() => fs.promises.rename(dir, target));
+  } catch (e) {
+    if (['EBUSY', 'EPERM', 'EACCES'].includes(e.code)) throw new Error('폴더 안의 파일을 다른 프로그램이 쓰고 있어 이름을 바꿀 수 없습니다');
+    throw e;
+  }
+  remapFolder(dir, target);
+  return target;
+});
+/**
+ * "Delete folder": the videos shown for this folder and their same-name subtitles go to the Recycle Bin;
+ * the folder itself goes too when nothing else is left in it. Other files are never touched.
+ */
+handle('lib:deleteFolder', async (dir) => {
+  if (!dir || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error('폴더를 찾을 수 없습니다');
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const videos = entries.filter((e) => e.isFile() && library.isVideo(e.name)).map((e) => e.name);
+  const bases = videos.map((n) => n.slice(0, n.lastIndexOf('.')).toLowerCase());
+  const subs = entries.filter((e) => e.isFile() && library.isSubtitle(e.name)
+    && bases.some((b) => e.name.toLowerCase().startsWith(b + '.'))).map((e) => e.name);
+  stopStream();
+  let moved = 0;
+  const failed = [];
+  for (const n of [...videos, ...subs]) {
+    try { await retry(() => shell.trashItem(path.join(dir, n))); moved++; } catch (e) { failed.push(n); }
+  }
+  for (const n of videos) delete history.data.items[path.join(dir, n)];
+  history.save();
+  let folderRemoved = false;
+  if (!protectedFolder(dir)) {
+    const rest = (await fs.promises.readdir(dir)).filter((n) => !/^(thumbs\.db|desktop\.ini|\.ds_store)$/i.test(n));
+    if (!rest.length) {
+      try { await retry(() => shell.trashItem(dir)); folderRemoved = true; } catch (e) { /* leave the empty folder */ }
+    }
+  }
+  if (folderRemoved && (settings.data.folders || []).some((f) => samePath(f, dir))) {
+    settings.data.folders = settings.data.folders.filter((f) => !samePath(f, dir));
+    settings.save();
+  }
+  return { videos: videos.length, subs: subs.length, moved, failed, folderRemoved };
+});
+handle('lib:folderInfo', async (dir) => ({ protected: protectedFolder(dir), root: (settings.data.folders || []).some((f) => samePath(f, dir)) }));
+
 handle('lib:removeFolder', async (p) => {
   settings.data.folders = (settings.data.folders || []).filter((x) => x !== p);
   settings.save();
@@ -348,7 +450,7 @@ handle('media:extractSub', async (p, index) => {
   await fs.promises.writeFile(out, text, 'utf8');
   return text;
 });
-handle('media:keyframe', async (p, ms) => ff.keyframeBefore(p, ms));
+handle('media:keyframes', async (p, ms, before, after) => ff.keyframesAround(p, ms, before, after));
 handle('media:stopStream', async () => { stopStream(); return true; });
 handle('media:saveScreenshot', async (bytes, name) => {
   const dir = path.join(app.getPath('pictures'), 'MoaPlayer');

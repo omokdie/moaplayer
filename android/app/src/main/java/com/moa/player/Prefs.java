@@ -21,6 +21,7 @@ public final class Prefs {
     public static final String DOUBLE_TAP = "double_tap";
     public static final String SEEK_SEC = "seek_seconds";
     public static final String LONG_SPEED = "long_press_speed";
+    public static final String FAST_SEEK = "fast_seek";
     public static final String VOL_BOOST = "volume_boost";
     public static final String REMEMBER_BRIGHT = "remember_brightness";
     public static final String BRIGHT_LEVEL = "brightness_level_v1";

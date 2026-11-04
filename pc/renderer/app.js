@@ -14,6 +14,7 @@
     volume: 1, muted: false, brightness: 1, speed: 1, repeat: 0, abA: -1, abB: -1, locked: false, controls: true,
     sleepAt: 0, sleepEnd: false, lastSave: 0, triedSw: false, showRemain: false, token: 0, pendingSeek: 0,
     longPress: false, shownCues: '', seeking: false,
+    seekToken: 0, seekPending: null, seekPendingToken: 0, seekPlay: false, lastSeekAt: 0, kfSegs: [], longGop: false,
   };
   const ASPECTS = ['화면에 맞춤', '늘이기', '꽉 채우기(자르기)', '원본 크기 (100%)', '16:9', '4:3'];
   const REPEATS = ['끄기', '한 개 반복', '전체 반복'];
@@ -23,6 +24,7 @@
   const basename = (p) => p.split(/[\\/]/).pop();
   const dirname = (p) => p.replace(/[\\/][^\\/]*$/, '');
   const stripExt = (n) => n.replace(/\.[^.]+$/, '');
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const extOf = (n) => (n.split('.').pop() || '').toLowerCase();
   function fmtTime(ms) {
     if (!Number.isFinite(ms) || ms < 0) ms = 0;
@@ -184,14 +186,15 @@
         <div class="f-info">동영상 ${f.videos.length}개${size ? ' · ' + size : ''} · ${esc(f.path)}</div></div>${n ? `<span class="badge-new">${n} NEW</span>` : ''}`);
       row.title = f.path;
       row.onclick = () => { S.folder = f; S.search = ''; $('#search').value = ''; renderLibrary(); $('#lib-content').scrollTop = 0; };
-      row.oncontextmenu = (e) => {
-        e.preventDefault();
-        showMenu(e.clientX, e.clientY, [
-          { label: '열기', fn: () => row.onclick() },
-          { label: '탐색기에서 열기', fn: () => api.invoke('shell:showItem', f.videos[0].path) },
-          { label: '전체 재생', fn: () => play(sortVideos(f.videos), 0) },
-        ]);
+      row.oncontextmenu = (e) => { e.preventDefault(); folderMenu(e.clientX, e.clientY, f, row); };
+      const more = el('button', 'icon-btn f-more', icon('more'));
+      more.title = '폴더 메뉴 (이름 변경·삭제)';
+      more.onclick = (e) => {
+        e.stopPropagation();
+        const r = more.getBoundingClientRect();
+        folderMenu(r.right - 190, r.bottom + 2, f, row);
       };
+      row.appendChild(more);
       wrap.appendChild(row);
     }
     content.appendChild(wrap);
@@ -236,6 +239,58 @@
     if (info.video) parts.push(resLabel(info.video.width, info.video.height), codecName(info.video.codec));
     if (card._showFolder) parts.push(basename(dirname(v.path)));
     card.querySelector('.v-info').textContent = parts.filter(Boolean).join(' · ');
+  }
+
+  function folderMenu(x, y, f, row) {
+    showMenu(x, y, [
+      { label: '열기', fn: () => row.onclick() },
+      { label: '전체 재생', fn: () => play(sortVideos(f.videos), 0) },
+      { label: '탐색기에서 열기', fn: () => api.invoke('shell:showItem', f.videos[0] ? f.videos[0].path : f.path) },
+      { sep: true },
+      { label: '폴더 이름 변경', fn: () => renameFolder(f) },
+      { label: '폴더 삭제 (휴지통으로)', fn: () => deleteFolder(f) },
+    ]);
+  }
+
+  async function renameFolder(f) {
+    let info = {};
+    try { info = await api.invoke('lib:folderInfo', f.path); } catch (e) { /* ask the main process anyway */ }
+    if (info.protected) { toast('Windows 기본 폴더(바탕 화면·다운로드·동영상 등)는 이름을 바꿀 수 없습니다', 4000); return; }
+    dialog('폴더 이름 변경', dirname(f.path), [
+      { label: '취소' },
+      {
+        label: '변경', primary: true, fn: async (inp) => {
+          const name = inp.value.trim();
+          if (!name || name === f.name) return;
+          try {
+            await api.invoke('lib:renameFolder', f.path, name);
+            [S.settings, S.history] = await Promise.all([api.invoke('settings:get'), api.invoke('history:all')]);
+            S.folder = null;
+            toast('폴더 이름을 바꿨습니다');
+            await loadLibrary();
+          } catch (e) { toast(e.message, 4500); }
+        },
+      },
+    ], f.name);
+  }
+
+  function deleteFolder(f) {
+    const n = f.videos.length;
+    dialog('폴더 삭제', `'${f.name}' 폴더의 동영상 ${n}개를 휴지통으로 옮길까요?\n같은 이름의 자막 파일도 함께 옮기고, 폴더에 다른 파일이 없으면 폴더도 지웁니다. 휴지통에서 되살릴 수 있습니다.`, [
+      { label: '취소' },
+      {
+        label: '삭제', primary: true, fn: async () => {
+          try {
+            const r = await api.invoke('lib:deleteFolder', f.path);
+            [S.settings, S.history] = await Promise.all([api.invoke('settings:get'), api.invoke('history:all')]);
+            S.folder = null;
+            if (r.failed.length) toast(`${r.moved}개를 휴지통으로 옮겼습니다. ${r.failed.length}개는 사용 중이라 옮기지 못했습니다`, 5000);
+            else toast(r.folderRemoved ? '폴더를 휴지통으로 옮겼습니다' : `동영상 ${r.videos}개를 휴지통으로 옮겼습니다 (폴더에 다른 파일이 있어 폴더는 남겼습니다)`, 4500);
+            await loadLibrary();
+          } catch (e) { toast('삭제할 수 없습니다: ' + e.message, 4500); }
+        },
+      },
+    ]);
   }
 
   function videoMenu(x, y, v, list, i) {
@@ -462,7 +517,9 @@
     const token = ++P.token;
     const item = P.list[P.index];
     P.item = item;
-    Object.assign(P, { abA: -1, abB: -1, zoom: 1, panX: 0, panY: 0, subTracks: [], subSel: -1, otherSubs: [], triedSw: false, swBurn: -1, shownCues: '', info: null, dur: 0 });
+    Object.assign(P, { abA: -1, abB: -1, zoom: 1, panX: 0, panY: 0, subTracks: [], subSel: -1, otherSubs: [], triedSw: false, swBurn: -1, shownCues: '', info: null, dur: 0,
+      seekPending: null, kfSegs: [], longGop: false });
+    P.seekToken++;
     renderSubsHtml('', false);
     updateAbUi();
     const title = stripExt(item.name);
@@ -493,21 +550,70 @@
     loadSubtitles(item, info, token);
   }
 
-  async function streamUrl(startMs) {
-    const info = P.info;
-    const v = info && info.video;
-    const copy = P.swBurn < 0 && canCopyVideo(info);
-    let start = startMs;
-    if (copy && startMs > 0) {
-      // with stream copy the output begins at the key frame before the requested time
-      try { start = await api.invoke('media:keyframe', P.item.path, startMs); } catch (e) { start = startMs; }
+  // ------------------------------------------------------------ key frames (fast seeking)
+  // Key frames are looked up with one short ffprobe read around the target and remembered per file.
+  const KF_WINDOW = 6000;
+  async function keyframesNear(ms) {
+    const a = Math.max(0, ms - KF_WINDOW), b = ms + KF_WINDOW;
+    const hit = P.kfSegs.find((g) => g.from <= a && g.to >= b);
+    if (hit) return hit.keys;
+    const item = P.item;
+    if (!item) return null;
+    try {
+      const r = await Promise.race([api.invoke('media:keyframes', item.path, ms, KF_WINDOW, KF_WINDOW), sleep(1500)]);
+      if (!r || !r.keys || P.item !== item) return null;
+      P.kfSegs.push(r);
+      if (P.kfSegs.length > 80) P.kfSegs.shift();
+      return r.keys;
+    } catch (e) { return null; }
+  }
+  // closest key frame within ±tol of ms that still moves away from `from` in the same direction
+  function nearestKey(keys, ms, tol, from) {
+    let best = null;
+    for (const k of keys) {
+      if (Math.abs(k - ms) > tol) continue;
+      if (Math.sign(k - from) !== Math.sign(ms - from) || Math.abs(k - from) < 500) continue;
+      if (best === null || Math.abs(k - ms) < Math.abs(best - ms)) best = k;
     }
+    return best;
+  }
+  function keyAtOrBefore(keys, ms) {
+    let r = null;
+    for (const k of keys) if (k <= ms + 1) r = k;
+    return r;
+  }
+  // a 10 s skip may land up to 5 s off; never more than half the skip
+  const skipTolerance = (d) => Math.min(5000, Math.abs(d) / 2);
+  // HW mode: exact seeks are quick when key frames are close together; only long key-frame intervals
+  // (common in downloaded MKV/MP4) are worth snapping, so measure that once per file.
+  async function detectLongGop(item) {
+    const keys = await keyframesNear(getPos() + KF_WINDOW);
+    if (!keys || P.item !== item) return;
+    let gap = keys.length < 2 ? KF_WINDOW * 2 : 0;
+    for (let i = 1; i < keys.length; i++) gap = Math.max(gap, keys[i] - keys[i - 1]);
+    P.longGop = gap > 2500;
+  }
+
+  // SW stream URL. With stream copy the output begins at a key frame: `key` is that key frame when
+  // known (playback then catches up from key to target, see beginCatchup).
+  function streamUrlFor(target, key, copy) {
+    const v = P.info && P.info.video;
     P.swCopy = copy;
-    P.swOffset = start;
-    P.swTarget = startMs;
+    P.swOffset = copy && key != null ? key : target;
+    P.swTarget = target;
+    const t = copy && target > 0 ? target + 1 : target;   // +1 ms: never fall back to the previous key frame
     const hmax = v && v.height > 1080 && !copy ? 1080 : 0;
-    return `moa://stream/?p=${encodeURIComponent(P.item.path)}&t=${Math.round(startMs)}&a=${P.audioIdx}` +
+    return `moa://stream/?p=${encodeURIComponent(P.item.path)}&t=${Math.round(t)}&a=${P.audioIdx}` +
       `&v=${copy ? 'copy' : 'enc'}&s=${P.swBurn}&h=${hmax}&hevc=${v && v.codec === 'hevc' ? 1 : 0}&r=${Date.now()}`;
+  }
+  async function streamUrl(startMs) {
+    const copy = P.swBurn < 0 && canCopyVideo(P.info);
+    let key = null;
+    if (copy && startMs > 0) {
+      const keys = await keyframesNear(startMs);
+      if (keys && keys.length) key = keyAtOrBefore(keys, startMs);
+    }
+    return streamUrlFor(startMs, key, copy);
   }
 
   async function startPlayback(sw, startMs, autoplay) {
@@ -564,9 +670,12 @@
   }
 
   function getPos() {
+    if (P.seekPending != null) return P.seekPending;     // a seek is on its way: count from its target
     if (P.catchup) return P.swTarget;
     return P.sw ? P.swOffset + video.currentTime * 1000 : video.currentTime * 1000;
   }
+  // the latest seek has arrived (older seeks that were overtaken do not count)
+  function seekDone() { if (P.seekPendingToken === P.seekToken) P.seekPending = null; }
 
   // Stream copy can only start at a key frame. Play invisibly and fast from that key frame
   // to the requested time, so seeks land exactly where the user asked.
@@ -586,6 +695,7 @@
   }
   function endCatchup() {
     P.catchup = false;
+    seekDone();
     video.playbackRate = P.longPress ? video.playbackRate : P.speed;
     video.muted = false;
     video.style.opacity = '';
@@ -594,24 +704,60 @@
   }
   function getDur() { return P.dur || (Number.isFinite(video.duration) ? video.duration * 1000 : 0); }
 
-  async function seekTo(ms) {
+  // opts.skip: a skip by a fixed step (double-click, arrow keys, wheel, media keys). With "빠른 탐색"
+  // it may land on a nearby key frame, which is what makes it instant: no decoding up to an exact frame
+  // (HW) and no restart catch-up (SW copy).
+  async function seekTo(ms, opts = {}) {
+    if (!P.item) return;
     const dur = getDur();
     ms = clamp(ms, 0, dur > 0 ? Math.max(0, dur - 300) : ms);
+    const token = ++P.seekToken;
+    const from = getPos();
+    if (P.seekPending == null) P.seekPlay = P.catchup ? !!P.catchupPlay : !video.paused && !video.ended;
+    P.seekPending = ms;
+    const now = performance.now();
+    const burst = now - P.lastSeekAt < 160;
+    P.lastSeekAt = now;
+    updateProgress();
+    const fast = !!opts.skip && S.settings.fastSeek !== false;
+    const item = P.item;
     if (P.sw) {
-      const wasPlaying = !video.paused;
       $('#spinner').classList.remove('hidden');
-      video.src = await streamUrl(ms);
+      if (burst) await sleep(120);                 // key repeat / rapid clicks: restart the decoder once
+      if (token !== P.seekToken || P.item !== item) return;
+      const copy = P.swBurn < 0 && canCopyVideo(P.info);
+      let target = ms, key = null;
+      if (copy && ms > 0) {
+        const keys = await keyframesNear(ms);
+        if (token !== P.seekToken || P.item !== item) return;
+        if (keys && keys.length) {
+          const snap = fast ? nearestKey(keys, ms, skipTolerance(ms - from), from) : null;
+          if (snap != null) { target = snap; key = snap; } else key = keyAtOrBefore(keys, ms);
+        }
+      }
+      P.seekPending = target;
+      const play = P.seekPlay || P.seekResume;
+      video.src = streamUrlFor(target, key, copy);
+      P.seekPendingToken = token;
       video.playbackRate = P.speed;
-      if (wasPlaying || P.seekResume) video.play().catch(() => {});
-      beginCatchup(wasPlaying || P.seekResume);
-    } else if (video.readyState === 0) {
-      P.pendingSeek = ms;
+      if (play) video.play().catch(() => {});
+      beginCatchup(play);
     } else {
-      video.currentTime = ms / 1000;
+      let target = ms;
+      if (fast && P.longGop) {
+        const keys = await keyframesNear(ms);
+        if (token !== P.seekToken || P.item !== item) return;
+        const snap = keys ? nearestKey(keys, ms, skipTolerance(ms - from), from) : null;
+        if (snap != null) target = snap;
+      }
+      P.seekPending = target;
+      P.seekPendingToken = token;
+      if (video.readyState === 0) P.pendingSeek = target;
+      else video.currentTime = target / 1000;
     }
     updateProgress();
   }
-  const seekBy = (d) => seekTo(getPos() + d);
+  const seekBy = (d) => seekTo(getPos() + d, { skip: true });
 
   function saveHistory() {
     if (!P.item) return;
@@ -649,6 +795,7 @@
 
   // ------------------------------------------------------------ video events
   video.addEventListener('loadedmetadata', () => {
+    if (!P.sw && P.item && S.settings.fastSeek !== false) detectLongGop(P.item);
     if (!P.sw && P.pendingSeek > 0) { video.currentTime = P.pendingSeek / 1000; P.pendingSeek = 0; }
     if (!P.dur && Number.isFinite(video.duration)) P.dur = video.duration * 1000;
     layoutVideo();
@@ -660,6 +807,7 @@
     }, 1500);
   });
   video.addEventListener('error', () => {
+    P.seekPending = null;
     if (!video.getAttribute('src')) return;
     if (!P.sw) { fallbackToSw(); return; }
     $('#spinner').classList.add('hidden');
@@ -679,11 +827,14 @@
     startPlayback(true, getPos() || P.pendingSeek || 0, true);
   }
   video.addEventListener('waiting', () => $('#spinner').classList.remove('hidden'));
-  video.addEventListener('playing', () => { if (!P.catchup) $('#spinner').classList.add('hidden'); updatePlayBtn(); api.invoke('power:playing', true); scheduleHide(); });
-  video.addEventListener('canplay', () => { if (!P.catchup) $('#spinner').classList.add('hidden'); });
+  video.addEventListener('playing', () => { if (!P.catchup) { $('#spinner').classList.add('hidden'); if (P.sw) seekDone(); } updatePlayBtn(); api.invoke('power:playing', true); scheduleHide(); });
+  video.addEventListener('canplay', () => { if (!P.catchup) { $('#spinner').classList.add('hidden'); if (P.sw) seekDone(); } });
   video.addEventListener('pause', () => { if (P.catchup) return; updatePlayBtn(); api.invoke('power:playing', false); saveHistory(); showControls(); });
   video.addEventListener('play', updatePlayBtn);
-  video.addEventListener('seeked', () => { if (!P.catchup) reportPlayerState(); });
+  video.addEventListener('seeked', () => {
+    if (!P.sw) seekDone();
+    if (!P.catchup) reportPlayerState();
+  });
   video.addEventListener('ratechange', () => { if (!P.catchup) reportPlayerState(); });
   video.addEventListener('ended', onEnded);
   video.addEventListener('resize', layoutVideo);
@@ -1630,6 +1781,7 @@
       addSelect(body, '이어보기', [['ask', '매번 묻기'], ['always', '항상 이어보기'], ['never', '처음부터 재생']], S.settings.resume || 'ask', (v) => set({ resume: v }));
       addSwitch(body, '다음 동영상 자동 재생', S.settings.autoplayNext !== false, (on) => set({ autoplayNext: on }));
       addSelect(body, '탐색 간격 (더블클릭·방향키)', [5, 10, 15, 20, 30, 60].map((s) => [s, s + '초']), S.settings.seekSeconds || 10, (v) => set({ seekSeconds: Number(v) }));
+      addSwitch(body, '빠른 탐색 (건너뛸 때 가까운 키프레임으로 바로 이동)', S.settings.fastSeek !== false, (on) => set({ fastSeek: on }));
       addSelect(body, '한 번 클릭', [['mx', '컨트롤 표시/숨기기 (MX 방식)'], ['play', '재생/일시정지']], S.settings.singleClick || 'mx', (v) => set({ singleClick: v }));
       addSelect(body, '가운데 더블클릭', [['mx', '재생/일시정지 (MX 방식)'], ['fullscreen', '전체 화면']], S.settings.doubleClick || 'mx', (v) => set({ doubleClick: v }));
       addSelect(body, '마우스 휠', [['volume', '볼륨'], ['seek', '5초 탐색']], S.settings.wheel || 'volume', (v) => set({ wheel: v }));

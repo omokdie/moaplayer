@@ -45,16 +45,12 @@ public class MainActivity extends BaseLibraryActivity {
             if (searchMode) {
                 PlayerActivity.play(this, videoAdapter.getItems(), pos, false);
             } else {
-                FolderItem f = folderAdapter.getItem(pos);
-                Intent i = new Intent(this, VideoListActivity.class);
-                i.putExtra(VideoListActivity.EXTRA_FOLDER, f.path);
-                i.putExtra(VideoListActivity.EXTRA_NAME, f.name);
-                startActivity(i);
+                openFolder(folderAdapter.getItem(pos));
             }
         });
         grid.setOnItemLongClickListener((parent, view, pos, id) -> {
-            if (!searchMode) return false;
-            showVideoActions(videoAdapter.getItem(pos), videoAdapter.getItems(), pos);
+            if (searchMode) showVideoActions(videoAdapter.getItem(pos), videoAdapter.getItems(), pos);
+            else showFolderActions(folderAdapter.getItem(pos));
             return true;
         });
         emptyButton.setOnClickListener(v -> requestMediaPermission());

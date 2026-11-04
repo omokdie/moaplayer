@@ -6,7 +6,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Stores resume positions, last played time and per-file subtitle delay. */
@@ -146,6 +148,26 @@ public final class HistoryDb extends SQLiteOpenHelper {
         try {
             getWritableDatabase().delete("history", null, null);
         } catch (Exception ignored) {
+        }
+    }
+
+    /** A folder was renamed: entries keyed by a path inside it move along. */
+    public synchronized void renamePrefix(String fromDir, String toDir, String newFolderName) {
+        Cursor c = null;
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            c = db.rawQuery("SELECT key FROM history WHERE substr(key, 1, ?) = ?", new String[]{String.valueOf(fromDir.length()), fromDir});
+            List<String> keys = new ArrayList<>();
+            while (c.moveToNext()) keys.add(c.getString(0));
+            for (String k : keys) {
+                ContentValues v = new ContentValues();
+                v.put("key", toDir + k.substring(fromDir.length()));
+                if (newFolderName != null) v.put("folder", newFolderName);
+                db.updateWithOnConflict("history", v, "key=?", new String[]{k}, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (c != null) c.close();
         }
     }
 

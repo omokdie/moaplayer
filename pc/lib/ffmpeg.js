@@ -108,13 +108,28 @@ async function thumbnail(file, out, durationMs) {
 }
 
 /** Time (ms) of the video key frame at or before `ms` — where a stream-copy seek really starts. */
-async function keyframeBefore(file, ms) {
-  const sec = Math.max(0, ms / 1000);
-  const out = await run(ffprobePath, ['-v', 'error', '-select_streams', 'v:0', '-read_intervals', `${sec.toFixed(3)}%+#1`,
+/**
+ * Key frames of the first video stream around `ms`: one quick ffprobe pass that seeks (via the
+ * container index) to the key frame at or before ms-before and reads packets up to ms+after.
+ * The first key frame in the list is therefore always at or before ms-before (when the file has one).
+ * Returns {keys: [ms...] ascending, from, to} — the covered range in ms.
+ */
+async function keyframesAround(file, ms, before = 6000, after = 6000) {
+  const from = Math.max(0, ms - before) / 1000, to = Math.max(0, ms + after) / 1000;
+  const out = await run(ffprobePath, ['-v', 'error', '-select_streams', 'v:0', '-read_intervals', `${from.toFixed(3)}%${to.toFixed(3)}`,
     '-show_entries', 'packet=pts_time,flags', '-of', 'csv=p=0', file], { timeout: 15000 });
-  const line = out.split(/\r?\n/).find((l) => l.trim());
-  const t = line ? parseFloat(line.split(',')[0]) : NaN;
-  return Number.isFinite(t) && t <= sec + 0.05 ? Math.round(t * 1000) : ms;
+  const keys = [];
+  let first = Infinity;
+  for (const line of out.split(/\r?\n/)) {
+    const i = line.indexOf(',');
+    const t = parseFloat(i >= 0 ? line.slice(0, i) : line);
+    if (!Number.isFinite(t)) continue;
+    const v = Math.round(t * 1000);
+    if (v < first) first = v;
+    if (i >= 0 && line.indexOf('K', i) > i) keys.push(v);
+  }
+  keys.sort((a, b) => a - b);
+  return { keys, from: Number.isFinite(first) ? Math.min(first, Math.round(from * 1000)) : Math.round(from * 1000), to: Math.round(to * 1000) };
 }
 
 async function extractSubtitle(file, subIndex) {
@@ -148,10 +163,13 @@ function streamArgs({ file, start = 0, audio = 0, videoCopy = false, burnSub = -
     if (hevcTag) args.push('-tag:v', 'hvc1');
   } else {
     if (vf.length) args.push('-vf', vf.join(','));
-    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'film', '-crf', '20', '-g', '48', '-bf', '0');
+    // zerolatency: no look-ahead / B-frames, so the first picture comes out right after a seek
+    args.push('-c:v', 'libx264', '-preset', 'veryfast', '-tune', 'zerolatency', '-crf', '20', '-g', '48', '-bf', '0');
   }
   args.push('-c:a', 'aac', '-b:a', '192k', '-ac', '2', '-ar', '48000', '-sn', '-dn',
-    '-max_muxing_queue_size', '4096', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof', 'pipe:1');
+    '-max_muxing_queue_size', '4096', '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+    // short fragments: the player can start as soon as ~0.3 s is ready instead of a whole key-frame interval
+    '-frag_duration', '300000', 'pipe:1');
   return args;
 }
 
@@ -160,6 +178,6 @@ function spawnStream(opts) {
 }
 
 module.exports = {
-  findBinaries, available, probe, thumbnail, extractSubtitle, keyframeBefore, spawnStream, streamArgs,
+  findBinaries, available, probe, thumbnail, extractSubtitle, keyframesAround, spawnStream, streamArgs,
   get ffmpegPath() { return ffmpegPath; }, get ffprobePath() { return ffprobePath; },
 };
