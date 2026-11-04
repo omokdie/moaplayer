@@ -12,7 +12,7 @@ Android 앱(`versionName` = 버전, `versionCode` = 주×10000 + 부×100 + 수�
 
 `Release` 워크플로가 알아서:
 - 태그 `v<버전>`을 그 커밋에 붙이고 GitHub Release를 만들고,
-- Windows 설치 프로그램(`MoaPlayer-Setup-<버전>.exe`, 자동 업데이트용 `latest.yml`)과
+- Windows 설치 프로그램(`MoaPlayer-Setup-<버전>.exe`, 자동 업데이트용 `latest.yml`, `.blockmap`)과
   Android `MoaPlayer-<버전>.apk`를 빌드해 첨부합니다. (보통 10~15분)
 
 설치되어 있는 Windows 앱은 몇 시간 안에(또는 다음 실행 때) 새 버전을 받아 두었다가 종료할 때 설치하고,

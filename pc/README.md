@@ -21,11 +21,10 @@ MX Player와 같은 방식으로 쓰는 PC용 동영상 플레이어입니다. �
    npm install
    npm run dist:win
    ```
-4. 결과: `pc\dist\MoaPlayer-Setup-<버전>.exe` (같은 폴더의 `latest.yml`은 자동 업데이트용)
+4. 결과: `pc\dist\MoaPlayer-Setup-<버전>.exe` (같은 폴더의 `latest.yml`, `*.blockmap`은 자동 업데이트용)
 
 용량을 줄이는 설정(`package.json` → `build`): 언어 파일은 한국어·영어만(`electronLanguages`), WebGPU 셰이더 컴파일러
-`dxcompiler.dll` 제외(`scripts/after-pack.cjs`), 최대 압축(`compression: maximum`) + 하나로 묶은 압축(`nsis.differentialPackage: false` —
-설치 파일이 약 30MB 작아지는 대신 업데이트 때 변경분만이 아니라 설치 파일 전체를 받습니다).
+`dxcompiler.dll` 제외(`scripts/after-pack.cjs`), 최대 압축(`compression: maximum`).
 
 개발 중 바로 실행: `npm start` (`pc\ffmpeg` 또는 PATH의 FFmpeg 사용).
 실행 옵션: `--moa-library=<폴더>`(라이브러리 폴더 지정), `--moa-userdata=<폴더>`(설정 저장 위치).
