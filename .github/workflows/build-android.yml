@@ -131,6 +131,24 @@ jobs:
             grep -q "lib/$abi/libffmpegJNI.so" apk-files.txt \
               || { echo "::error::lib/$abi/libffmpegJNI.so is missing from the APK"; exit 1; }
           done
+          # ...and loadable: JNI_OnLoad exported, no text relocations (refused since Android 6),
+          # only system libraries needed, 16 KB page alignment on arm64 (newer 64-bit devices)
+          NB="$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          rm -rf apk-lib && mkdir apk-lib && unzip -q -o "out/MoaPlayer-${VERSION}.apk" 'lib/*' -d apk-lib
+          for abi in arm64-v8a armeabi-v7a; do
+            SO="apk-lib/lib/$abi/libffmpegJNI.so"
+            "$NB/llvm-nm" -D --defined-only "$SO" > syms.txt
+            "$NB/llvm-readelf" -dW "$SO" > dyn.txt
+            echo "$abi: $(grep -c . syms.txt) exported symbols, needs: $(grep NEEDED dyn.txt | sed 's/.*\[\(.*\)\]/\1/' | tr '\n' ' ')"
+            grep -q " T JNI_OnLoad$" syms.txt || { echo "::error::JNI_OnLoad not exported ($abi)"; exit 1; }
+            if grep -q TEXTREL dyn.txt; then echo "::error::text relocations in $abi library"; exit 1; fi
+            if grep NEEDED dyn.txt | grep -v -E "\[(libandroid|liblog|libm|libdl|libc)\.so\]"; then
+              echo "::error::unexpected library dependency ($abi)"; exit 1
+            fi
+          done
+          "$NB/llvm-readelf" -lW apk-lib/lib/arm64-v8a/libffmpegJNI.so | awk '$1 == "LOAD" { print $NF }' > align.txt
+          cat align.txt
+          if grep -v -x "0x4000" align.txt; then echo "::error::arm64 library is not 16 KB aligned"; exit 1; fi
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           "$BT/aapt2" dump badging "out/MoaPlayer-${VERSION}.apk" > badging.txt || true
           head -n 3 badging.txt || true
