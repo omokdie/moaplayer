@@ -23,6 +23,13 @@ val localKeyProps = Properties().apply {
 }
 val hasReleaseKey = envKeystore != null || localKeyProps.getProperty("storeFile") != null
 
+// Fallback audio decoder for formats the phone cannot decode itself (E-AC3/AC3, DTS, TrueHD, ALAC):
+// Media3's FFmpeg extension — Java in src/main/java/androidx/media3/decoder/ffmpeg, JNI wrapper in
+// src/main/cpp. Its FFmpeg static libraries come from scripts/build-ffmpeg-android.sh (CI builds and
+// caches them in ../ffmpeg-android); without them the app is simply built without this decoder.
+val ffmpegDir = rootProject.file("ffmpeg-android")
+val ffmpegAbis = listOf("arm64-v8a", "armeabi-v7a").filter { File(ffmpegDir, "$it/lib/libavcodec.a").exists() }
+
 android {
     namespace = "com.moa.player"
     compileSdk = 36
@@ -33,6 +40,25 @@ android {
         targetSdk = 34
         versionCode = appVersionCode
         versionName = appVersion
+        if (ffmpegAbis.isNotEmpty()) {
+            ndk { abiFilters += ffmpegAbis }
+            externalNativeBuild { cmake { arguments += "-DFFMPEG_DIR=${ffmpegDir.absolutePath}" } }
+        }
+    }
+
+    if (ffmpegAbis.isNotEmpty()) {
+        ndkVersion = "27.2.12479018" // r27c, the NDK that built the FFmpeg libraries (build-android.yml)
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.22.1"
+            }
+        }
+    }
+
+    packaging {
+        // compressed native library: a smaller APK to download (Android unpacks it once at install)
+        jniLibs { useLegacyPackaging = true }
     }
 
     signingConfigs {

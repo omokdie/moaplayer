@@ -439,9 +439,12 @@ public final class PlayerEngine {
     }
 
     private ExoPlayer build(boolean swMode) {
+        // EXTENSION_RENDERER_MODE_ON: the FFmpeg audio decoder (androidx.media3.decoder.ffmpeg, built in)
+        // takes the formats Android cannot decode on this phone — E-AC3/AC3, DTS, TrueHD, ALAC.
+        // Android's own decoders still come first for everything they can play.
         DefaultRenderersFactory rf = new DefaultRenderersFactory(app)
                 .setEnableDecoderFallback(true)
-                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+                .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setMediaCodecSelector(swMode ? SOFTWARE_FIRST : MediaCodecSelector.DEFAULT);
         if (Build.VERSION.SDK_INT >= 34) {
             // frames before a seek target are only decoded, not output: exact seeks finish sooner

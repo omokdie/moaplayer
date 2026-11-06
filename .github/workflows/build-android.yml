@@ -33,8 +33,33 @@ jobs:
 
       - uses: android-actions/setup-android@v3
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
+          # NDK + CMake: the FFmpeg audio decoder (E-AC3/AC3, DTS, TrueHD, ALAC) and its JNI wrapper
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0 ndk;27.2.12479018 cmake;3.22.1'
           log-accepted-android-sdk-licenses: false
+
+      # FFmpeg for the fallback audio decoder: our small build (android/scripts/build-ffmpeg-android.sh),
+      # static libraries for arm64-v8a + armeabi-v7a, cached by script hash and NDK version.
+      - name: Cache FFmpeg for Android
+        id: ffcache
+        uses: actions/cache@v5
+        with:
+          path: android/ffmpeg-android
+          key: ffmpeg-android-${{ hashFiles('android/scripts/build-ffmpeg-android.sh') }}-ndk27.2.12479018
+
+      - name: Build FFmpeg for Android
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: WORK="$RUNNER_TEMP/ffwork-android" bash android/scripts/build-ffmpeg-android.sh "$ANDROID_HOME/ndk/27.2.12479018" android/ffmpeg-android
+
+      - name: Check FFmpeg libraries
+        run: |
+          set -euo pipefail
+          for abi in arm64-v8a armeabi-v7a; do
+            for lib in avcodec swresample avutil; do
+              test -f "android/ffmpeg-android/$abi/lib/lib$lib.a" || { echo "::error::lib$lib.a missing for $abi"; exit 1; }
+            done
+          done
+          cat android/ffmpeg-android/README.txt
+          du -sh android/ffmpeg-android/*
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -99,6 +124,13 @@ jobs:
           APK=$(find android/app/build/outputs/apk/release -name '*.apk' ! -name '*unsigned*' | head -n 1)
           test -n "$APK" || { echo "::error::no APK produced"; exit 1; }
           cp "$APK" "out/MoaPlayer-${VERSION}.apk"
+          # the FFmpeg audio decoder must be inside, for both phone ABIs
+          unzip -l "out/MoaPlayer-${VERSION}.apk" > apk-files.txt
+          grep "lib/" apk-files.txt || true
+          for abi in arm64-v8a armeabi-v7a; do
+            grep -q "lib/$abi/libffmpegJNI.so" apk-files.txt \
+              || { echo "::error::lib/$abi/libffmpegJNI.so is missing from the APK"; exit 1; }
+          done
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
           "$BT/aapt2" dump badging "out/MoaPlayer-${VERSION}.apk" > badging.txt || true
           head -n 3 badging.txt || true

@@ -4,6 +4,9 @@ pc/dist/
 pc/ffmpeg/
 android/build/
 android/app/build/
+android/app/.cxx/
+android/ffmpeg-android/
+.ffmpeg-android-work/
 android/.gradle/
 android/local.properties
 .gradle/
