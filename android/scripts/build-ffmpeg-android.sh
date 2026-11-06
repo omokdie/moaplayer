@@ -81,10 +81,10 @@ for ABI in $ABIS; do
     test -f "$OUT/$ABI/lib/lib$lib.a" || { echo "missing lib$lib.a for $ABI"; exit 1; }
   done
   rm -rf "$OUT/$ABI/lib/pkgconfig" "$OUT/$ABI/share"
-  # the decoders really are in there
+  # the decoders really are in there (symbol list in a file: grep -q on a pipe trips pipefail)
+  "$TC/llvm-nm" "$OUT/$ABI/lib/libavcodec.a" > "$B/symbols.txt" 2>/dev/null || true
   for d in $DECODERS; do
-    "$TC/llvm-nm" "$OUT/$ABI/lib/libavcodec.a" 2>/dev/null | grep -q " [DR] ff_${d}_decoder$" \
-      || { echo "decoder $d missing in $ABI libavcodec.a"; exit 1; }
+    grep -q " [DdRr] ff_${d}_decoder$" "$B/symbols.txt" || { echo "decoder $d missing in $ABI libavcodec.a"; exit 1; }
   done
 done
 
