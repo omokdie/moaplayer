@@ -82,7 +82,7 @@ public class SettingsActivity extends Activity {
                     v = getActivity().getPackageManager().getPackageInfo(getActivity().getPackageName(), 0).versionName;
                 } catch (Exception ignored) {
                 }
-                about.setSummary("모아 플레이어 " + v + " · Media3 ExoPlayer 기반");
+                about.setSummary("모아 플레이어 " + v + " · Media3 ExoPlayer 기반 · 오디오 디코더 FFmpeg (LGPL 2.1, ffmpeg.org)");
             }
         }
 

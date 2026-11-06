@@ -18,6 +18,7 @@
 | 9 | 고화질 영상도 원본 화질 그대로 | ✅ 1.3.0: SW 변환에서 1080p 강제 축소 제거(설정으로 선택), CRF 20→17, 4K는 superfast, 고품질 sws_flags. HEVC Main10 지원 여부 따로 확인. Android: 스트림 해상도 제한(화면 크기) 해제. HW·SW 복사 모드는 원래 원본 그대로 |
 | 10 | 휴대폰에서 누르면 즉시 재생, 나가면 즉시 멈춤 | ✅ 1.4.0 (Android): 누르는 순간 `PlayerEngine.prepareAhead()`가 파일을 열고(일시정지·화면 없이 디코딩 시작) 플레이어 화면은 그걸 이어받음(`takeAhead`). 라이브러리 화면에서 예비 ExoPlayer를 미리 만들고(`warmUp`, IdleHandler) 코덱 목록을 백그라운드로 채움, 로컬 파일 시작 버퍼 250ms, API 34+ `BUFFER_FLAG_DECODE_ONLY`, `FLAG_ACTIVITY_NO_ANIMATION`·닫기 애니메이션 없음·회전 JUMPCUT·아이콘 없는 검은 스플래시(values-v31). 이어보기는 트랙이 확인되면 최대 2초 앞 키프레임으로 맞춤(빠른 탐색 켜짐일 때, `maybeSnap`) — 열었다 바로 닫아도 원래 위치를 유지(`keepMs`). 종료: 뒤로·닫기·오류·끝 → `exitPlayer()`가 그 자리에서 일시정지+위치 저장+`stop()`(예전엔 onStop까지 약 1초 더 재생), 홈·최근 앱은 onPause에서 멈춤(PiP·멀티 윈도우·백그라운드 재생 제외, onStop이 안 오면 onResume에서 다시 재생). 새 화면이 넘겨받은 뒤 닫히던 이전 화면은 플레이어를 건드리지 않음(`superseded`), 저장은 지금 플레이어가 가진 파일일 때만(`isCurrentItem`) |
 | 11 | 자동 업데이트 (휴대폰) | ✅ 1.4.0: `UpdateInstaller`가 APK를 백그라운드로 받아 크기·SHA-256(GitHub digest)·패키지·minSdk·versionCode(같은 값은 이름이 새로우면 허용: 베타→정식)·서명 인증서를 확인. 설치할 수 없는 버전(서명 다름·기기 미지원·번호 낮음·잘못된 파일)은 `update_blocked`로 기억해 다시 받지 않고 한 번만 설명. 무확인 설치 조건: Android 12+ · "이 출처 허용" · 새 APK의 targetSdk가 Android별 하한 이상(`targetAllowsSilent`: 12→29, 13→30, 14→31, 15→33, 16→34, 17→35, 그 이후는 대화상자) · 앱 화면이 하나도 안 보이고 플레이어가 아예 없음(홈 버튼·화면 끔으로 일시정지된 플레이어가 남아 있으면 그 영상이 닫히므로 설치하지 않음). 그러면 1분(화면 꺼짐이면 5초) 뒤 JobScheduler 작업(`UpdateJobService`, 백그라운드 프로세스가 얼어 있어도 실행됨)이 세션에 APK를 쓰고, 커밋 직전에 메인 스레드에서 다시 확인한 뒤 PackageInstaller(USER_ACTION_NOT_REQUIRED)로 설치(최대 2번, 실패·확인 필요 시 대화상자) → 다음 시작 때 "업데이트했습니다"(+알림). 그 밖에는 폴더 화면 대화상자 [지금 설치] → `ACTION_INSTALL_PACKAGE`(content:// `UpdateFileProvider`) → Android 설치 화면(처음엔 출처 허용 → 업데이트 → 열기). "나중에"는 하루 동안 다시 묻지 않음, 무확인 설치가 하루 넘게 안 되면 대화상자. 확인 주기 3시간(폴더 화면 onResume). Windows는 이미 자동(electron-updater) |
+| 12 | E-AC3 코덱이 없어 소리가 안 남 (휴대폰) | ✅ 1.4.1: Media3 1.11.1 FFmpeg 확장(`app/src/main/java/androidx/media3/decoder/ffmpeg`, JNI `app/src/main/cpp`)을 앱에 넣고 `EXTENSION_RENDERER_MODE_ON`(기기 코덱 우선, 없을 때만 FFmpeg). FFmpeg 6.0.1을 오디오 디코더 ac3·eac3·dca·truehd·mlp·alac + swresample만 넣어 arm64-v8a·armeabi-v7a 정적 라이브러리로 빌드(`android/scripts/build-ffmpeg-android.sh`, CI가 NDK r27c로 빌드·스크립트 해시로 캐시). libffmpegJNI.so 약 1.1MB/1.0MB, 압축 저장(useLegacyPackaging)으로 APK +1MB(3.2→4.2MB). arm64는 16KB 페이지 정렬. CI가 APK 안 .so 존재·JNI_OnLoad·TEXTREL 없음·의존 라이브러리·정렬을 검사 |
 
 이름: 'MX Player' 이름·로고는 쓰지 않고 "모아 플레이어 / MoaPlayer"로 만들었습니다. 패키지 `com.moa.player`, Windows appId 동일.
 
@@ -60,6 +61,6 @@ apksigner verify --print-certs MoaPlayer-x.y.z.apk     # 정식 키 SHA-256 042d
    이어보기 "매번 묻기"는 목록에서 열 때는 묻지 않고 바로 이어서 재생(즉시 재생 요구, 원래 그렇게 동작하던 것을 명시),
    플레이어 안에서 다음/이전 파일로 갈 때만 물음.
 3. Windows 코드 서명 인증서 없음 → 처음 실행 시 SmartScreen 경고. (`CSC_LINK` Secret으로 서명 가능)
-4. Android SW 디코더는 기기 코덱 사용 → AC3·DTS 음성은 기기에 따라 무음. (FFmpeg 확장 디코더를 넣으면 해결, APK 크기 증가)
+4. (해결 1.4.1) Android 오디오: 기기에 없는 E-AC3·AC3·DTS·TrueHD·ALAC는 FFmpeg 확장 디코더가 맡음. 실기기 확인 필요.
 5. Android 내장 자막에는 싱크 조절이 적용되지 않음.
 6. GitHub Actions의 Node 20 계열 액션 경고가 나오면 새 주 버전으로 올리기.

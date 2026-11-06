@@ -56,12 +56,17 @@ app/src/main/java/com/moa/player/
   UpdateFileProvider    내려받은 APK를 설치 화면에 넘기는 content:// 제공자
   UpdateReceiver        설치 결과, "앱이 업데이트됨"(MY_PACKAGE_REPLACED)
   UpdateJobService      앱을 쓰지 않을 때 무확인 설치를 실행하는 JobScheduler 작업
+  androidx.media3.decoder.ffmpeg   Media3 1.11.1의 FFmpeg 오디오 확장(그대로 복사, 널 주석만 뺌) + src/main/cpp의 JNI
+                        FFmpeg 정적 라이브러리는 scripts/build-ffmpeg-android.sh(FFmpeg 6.0.1, LGPL, 오디오 디코더
+                        ac3·eac3·dca·truehd·mlp·alac만)로 만들어 ffmpeg-android/에 둠 — CI가 NDK r27c로 빌드·캐시.
+                        없으면 이 디코더 없이 빌드됨(build-local.sh도 마찬가지)
   MediaRepo, ThumbLoader, HistoryDb, Prefs, SettingsActivity
 ```
 
 ## 알려진 제한
-- SW 디코더는 기기에 들어 있는 소프트웨어 코덱을 씁니다. MX Player의 자체 FFmpeg 코덱과 달리, 기기가 지원하지 않는
-  오디오(AC3·DTS 등)는 소리 없이 재생될 수 있습니다(재생 시 안내가 나옵니다).
+- 동영상은 기기 코덱(HW/SW)으로 재생합니다. 오디오는 기기 코덱이 우선이고, 기기에 없는 E-AC3·AC3·DTS·TrueHD·ALAC는
+  앱에 넣은 FFmpeg 디코더(1.4.1~, arm64-v8a·armeabi-v7a)가 맡습니다. 그 밖에 기기도 FFmpeg도 못 푸는 오디오는 소리 없이
+  재생되고 안내가 나옵니다.
 - 내장 자막에는 싱크 조절이 적용되지 않고, 외부 자막에만 적용됩니다.
 - Play 스토어 배포가 아니므로 자동 업데이트에는 "출처를 알 수 없는 앱 설치" 허용이 한 번 필요합니다.
   지금 설치된 앱과 서명이 다른 APK(예: 직접 디버그 키로 빌드한 것)는 그 위에 설치할 수 없어, 지우고 다시 설치해야 합니다.
