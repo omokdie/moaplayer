@@ -36,6 +36,7 @@ public final class Prefs {
     public static final String VIEW = "view_mode";
     public static final String THUMBS = "show_thumbs";
     public static final String ASKED_ALL_FILES = "asked_all_files";
+    public static final String LAST_TARGET_DIR = "last_target_dir";   // last "이동"/"복사" folder
     public static final String AUTO_UPDATE = "auto_update";
     public static final String UPDATE_LAST_CHECK = "update_last_check";
     public static final String UPDATE_SKIPPED = "update_skipped";

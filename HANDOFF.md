@@ -1,6 +1,6 @@
 # 모아 플레이어 — 작업 인계 문서 (Handoff)
 
-> 갱신: 2026-11-04. 다음 세션은 이 문서 → `README.md` → `RELEASING.md` → `pc/README.md` · `android/README.md` 순서로 읽으면 됩니다.
+> 갱신: 2026-11-17. 다음 세션은 이 문서 → `README.md` → `RELEASING.md` → `pc/README.md` · `android/README.md` 순서로 읽으면 됩니다.
 > 원본: **GitHub `omokdie/moaplayer` (공개, main)**.
 
 ## 1. 사용자 요구사항 (반영 상태)
@@ -19,6 +19,10 @@
 | 10 | 휴대폰에서 누르면 즉시 재생, 나가면 즉시 멈춤 | ✅ 1.4.0 (Android): 누르는 순간 `PlayerEngine.prepareAhead()`가 파일을 열고(일시정지·화면 없이 디코딩 시작) 플레이어 화면은 그걸 이어받음(`takeAhead`). 라이브러리 화면에서 예비 ExoPlayer를 미리 만들고(`warmUp`, IdleHandler) 코덱 목록을 백그라운드로 채움, 로컬 파일 시작 버퍼 250ms, API 34+ `BUFFER_FLAG_DECODE_ONLY`, `FLAG_ACTIVITY_NO_ANIMATION`·닫기 애니메이션 없음·회전 JUMPCUT·아이콘 없는 검은 스플래시(values-v31). 이어보기는 트랙이 확인되면 최대 2초 앞 키프레임으로 맞춤(빠른 탐색 켜짐일 때, `maybeSnap`) — 열었다 바로 닫아도 원래 위치를 유지(`keepMs`). 종료: 뒤로·닫기·오류·끝 → `exitPlayer()`가 그 자리에서 일시정지+위치 저장+`stop()`(예전엔 onStop까지 약 1초 더 재생), 홈·최근 앱은 onPause에서 멈춤(PiP·멀티 윈도우·백그라운드 재생 제외, onStop이 안 오면 onResume에서 다시 재생). 새 화면이 넘겨받은 뒤 닫히던 이전 화면은 플레이어를 건드리지 않음(`superseded`), 저장은 지금 플레이어가 가진 파일일 때만(`isCurrentItem`) |
 | 11 | 자동 업데이트 (휴대폰) | ✅ 1.4.0: `UpdateInstaller`가 APK를 백그라운드로 받아 크기·SHA-256(GitHub digest)·패키지·minSdk·versionCode(같은 값은 이름이 새로우면 허용: 베타→정식)·서명 인증서를 확인. 설치할 수 없는 버전(서명 다름·기기 미지원·번호 낮음·잘못된 파일)은 `update_blocked`로 기억해 다시 받지 않고 한 번만 설명. 무확인 설치 조건: Android 12+ · "이 출처 허용" · 새 APK의 targetSdk가 Android별 하한 이상(`targetAllowsSilent`: 12→29, 13→30, 14→31, 15→33, 16→34, 17→35, 그 이후는 대화상자) · 앱 화면이 하나도 안 보이고 플레이어가 아예 없음(홈 버튼·화면 끔으로 일시정지된 플레이어가 남아 있으면 그 영상이 닫히므로 설치하지 않음). 그러면 1분(화면 꺼짐이면 5초) 뒤 JobScheduler 작업(`UpdateJobService`, 백그라운드 프로세스가 얼어 있어도 실행됨)이 세션에 APK를 쓰고, 커밋 직전에 메인 스레드에서 다시 확인한 뒤 PackageInstaller(USER_ACTION_NOT_REQUIRED)로 설치(최대 2번, 실패·확인 필요 시 대화상자) → 다음 시작 때 "업데이트했습니다"(+알림). 그 밖에는 폴더 화면 대화상자 [지금 설치] → `ACTION_INSTALL_PACKAGE`(content:// `UpdateFileProvider`) → Android 설치 화면(처음엔 출처 허용 → 업데이트 → 열기). "나중에"는 하루 동안 다시 묻지 않음, 무확인 설치가 하루 넘게 안 되면 대화상자. 확인 주기 3시간(폴더 화면 onResume). Windows는 이미 자동(electron-updater) |
 | 12 | E-AC3 코덱이 없어 소리가 안 남 (휴대폰) | ✅ 1.4.1: Media3 1.11.1 FFmpeg 확장(`app/src/main/java/androidx/media3/decoder/ffmpeg`, JNI `app/src/main/cpp`)을 앱에 넣고 `EXTENSION_RENDERER_MODE_ON`(기기 코덱 우선, 없을 때만 FFmpeg). FFmpeg 6.0.1을 오디오 디코더 ac3·eac3·dca·truehd·mlp·alac + swresample만 넣어 arm64-v8a·armeabi-v7a 정적 라이브러리로 빌드(`android/scripts/build-ffmpeg-android.sh`, CI가 NDK r27c로 빌드·스크립트 해시로 캐시). libffmpegJNI.so 약 1.1MB/1.0MB, 압축 저장(useLegacyPackaging)으로 APK +1MB(3.2→4.2MB). arm64는 16KB 페이지 정렬. CI가 APK 안 .so 존재·JNI_OnLoad·TEXTREL 없음·의존 라이브러리·정렬을 검사 |
+
+| 13 | 파일 여러 개 선택해서 삭제·이름 변경 등 (휴대폰) | ✅ 1.5.0: 동영상 길게 누르기 → 선택 모드(`BaseLibraryActivity`의 `onVideoLongPress`/`onVideoTapWhileSelecting`, 툴바 위에 겹친 `sel_header`, 아래 `sel_bar`). 툴바 메뉴를 다시 만들지 않아 폴더 화면의 검색 상자가 접히지 않음. 이동·복사: `DirPicker`(저장소·하위 폴더·새 폴더, `last_target_dir`) → `FileOps.transfer`(같은 저장소는 rename, 다른 저장소는 복사+fsync 후 원본 삭제, 1MB 단위 진행률·취소 시 부분 파일 삭제, 이름이 겹치면 "이름 (1)", 공간 확인). 자막 짝: `FileOps.sidecarsOf`("이름.", "이름_", "이름 " 로 시작하는 자막, 더 긴 이름의 다른 동영상 것은 제외, 같은 이름 동영상이 또 있으면 옮기지 않고 복사·지우지 않음). 기록: `HistoryDb.renameKey`로 이동·이름 변경 후에도 이어보기·표시 유지(예전 이름 변경은 기록을 지웠음). 삭제: 권한 있으면 확인 후 파일 API(+자막), 없으면 `createDeleteRequest`(여러 URI). 이름 변경은 MX처럼 한 개 선택일 때만 |
+| 14 | 첨부 이미지처럼 '새 파일'로 바꾸기 (표시) | ✅ 1.5.0: 선택 → 표시 → 마지막 재생 파일 / 새 파일 / 완료된 파일 / 없음(`HistoryDb.mark`, 스키마 그대로). 새 파일 = 기록 삭제(NEW), 완료 = position=duration(진행 막대 가득), 없음 = position 0·last_played 0(NEW·진행·강조 없음), 마지막 재생 = last_played=now(이어보기 버튼, 이름 강조). `lastPlayed()`는 last_played>0만 |
+| 15 | 블루투스로 볼 때 레이턴시 (휴대폰) | ✅ 1.5.0: `AudioDelaySink`(ForwardingAudioSink)가 `getCurrentPositionUs`를 지연만큼(재생 속도 반영) 앞당겨 보고 → 영상·내장/외부 자막이 그만큼 늦게 나옴. 시작·탐색 직후엔 첫 샘플 시각 아래로 내려가지 않음(영상이 첫 화면에서 기다림). `AudioSync`가 `AudioDeviceCallback`으로 지금 출력(블루투스 기기 이름별·유선·USB·HDMI·스피커, 여러 개면 나중에 연결된 것)을 정하고 기기별 값(`audio_sync:<키>`, -500~+1500ms, 기본 0)을 적용. 플레이어 ⋮ → 오디오 싱크, 오디오 버튼 → 싱크 조절, 설정 → 재생. 블루투스 기기를 처음 쓸 때 한 번 안내 토스트 |
 
 이름: 'MX Player' 이름·로고는 쓰지 않고 "모아 플레이어 / MoaPlayer"로 만들었습니다. 패키지 `com.moa.player`, Windows appId 동일.
 
@@ -64,3 +68,6 @@ apksigner verify --print-certs MoaPlayer-x.y.z.apk     # 정식 키 SHA-256 042d
 4. (해결 1.4.1) Android 오디오: 기기에 없는 E-AC3·AC3·DTS·TrueHD·ALAC는 FFmpeg 확장 디코더가 맡음. 실기기 확인 필요.
 5. Android 내장 자막에는 싱크 조절이 적용되지 않음.
 6. GitHub Actions의 Node 20 계열 액션 경고가 나오면 새 주 버전으로 올리기.
+7. (1.5.0) 블루투스 지연은 기기마다 달라 자동으로 잴 수 없음 → 기본 0, 사용자가 한 번 맞추면 그 기기에 저장. 실기기에서
+   싱크 변경이 바로 반영되는지(늘리면 영상이 잠깐 멈췄다가 맞춰짐, 줄이면 몇 프레임 건너뜀) 확인 필요.
+   여러 개 선택·이동·복사·삭제·표시도 실기기 확인 필요(SD카드 쓰기는 Android 11+ "모든 파일 접근"에서만, Android 10 이하 SD카드 루트는 쓰기 불가로 표시됨).

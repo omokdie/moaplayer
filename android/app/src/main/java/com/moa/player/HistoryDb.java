@@ -98,7 +98,7 @@ public final class HistoryDb extends SQLiteOpenHelper {
     public synchronized Entry lastPlayed() {
         Cursor c = null;
         try {
-            c = getReadableDatabase().rawQuery("SELECT " + COLS + " FROM history ORDER BY last_played DESC LIMIT 1", null);
+            c = getReadableDatabase().rawQuery("SELECT " + COLS + " FROM history WHERE last_played > 0 ORDER BY last_played DESC LIMIT 1", null);
             return c.moveToFirst() ? read(c) : null;
         } catch (Exception e) {
             return null;
@@ -168,6 +168,63 @@ public final class HistoryDb extends SQLiteOpenHelper {
         } catch (Exception ignored) {
         } finally {
             if (c != null) c.close();
+        }
+    }
+
+    /** A file was renamed or moved: its entry (resume point, subtitle delay, NEW state) follows it. */
+    public synchronized void renameKey(String oldKey, String newKey, String newUri, String newTitle, String newFolder) {
+        if (oldKey == null || newKey == null || oldKey.equals(newKey)) return;
+        try {
+            ContentValues v = new ContentValues();
+            v.put("key", newKey);
+            if (newUri != null) v.put("uri", newUri);
+            if (newTitle != null) v.put("title", newTitle);
+            if (newFolder != null) v.put("folder", newFolder);
+            getWritableDatabase().updateWithOnConflict("history", v, "key=?", new String[]{oldKey}, SQLiteDatabase.CONFLICT_REPLACE);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** "표시" in the library (same order as the dialog). */
+    public static final int MARK_LAST = 0, MARK_NEW = 1, MARK_DONE = 2, MARK_NONE = 3;
+
+    /**
+     * Marks a file like MX Player: the last played file (resume button, highlighted name), a new file
+     * (NEW badge: no entry at all), a finished file, or none of these (seen, nothing to resume).
+     */
+    public synchronized void mark(String key, String uri, String title, String folder, long durationHint, int kind) {
+        if (key == null) return;
+        try {
+            SQLiteDatabase db = getWritableDatabase();
+            if (kind == MARK_NEW) {
+                db.delete("history", "key=?", new String[]{key});
+                return;
+            }
+            Entry e = get(key);
+            long dur = e != null && e.duration > 0 ? e.duration : Math.max(0, durationHint);
+            ContentValues v = new ContentValues();
+            if (uri != null) v.put("uri", uri);
+            if (title != null) v.put("title", title);
+            if (folder != null) v.put("folder", folder);
+            if (dur > 0) v.put("duration", dur);
+            if (kind == MARK_LAST) {
+                v.put("last_played", System.currentTimeMillis());
+            } else if (kind == MARK_DONE) {
+                if (dur <= 0) {
+                    dur = 1;   // length unknown: still counts as finished
+                    v.put("duration", dur);
+                }
+                v.put("position", dur);
+            } else {
+                v.put("position", 0);
+                v.put("last_played", 0);
+            }
+            int n = e != null ? db.update("history", v, "key=?", new String[]{key}) : 0;
+            if (n == 0) {
+                v.put("key", key);
+                db.insertWithOnConflict("history", null, v, SQLiteDatabase.CONFLICT_REPLACE);
+            }
+        } catch (Exception ignored) {
         }
     }
 

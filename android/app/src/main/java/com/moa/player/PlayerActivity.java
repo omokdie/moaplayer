@@ -768,6 +768,12 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         applyOrientation(w, hgt);
         showControls();
         loadSubtitlesAsync(r);
+        // first time with a Bluetooth device: say where the sync is (once per device)
+        if (AudioSync.get(this).takeBluetoothTip()) {
+            ui.postDelayed(() -> {
+                if (!isFinishing()) Util.toast(this, "블루투스 소리가 영상보다 늦으면 ⋮ → 오디오 싱크에서 맞출 수 있습니다");
+            }, 2500);
+        }
     }
 
     private void showFatal(String msg) {
@@ -1643,9 +1649,15 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
                     dlg.dismiss();
                     selectTrack(groups.get(which), indexes.get(which), C.TRACK_TYPE_AUDIO);
                 })
+                .setNeutralButton("싱크 조절", (dlg, w) -> showAudioSyncDialog())
                 .setNegativeButton("닫기", null)
                 .create();
         showImmersive(d);
+    }
+
+    /** Sound late or early (Bluetooth): picture and subtitles move to match; kept per output device. */
+    private void showAudioSyncDialog() {
+        showImmersive(AudioSync.dialog(this, null));
     }
 
     private void selectTrack(Tracks.Group g, int i, int type) {
@@ -2027,6 +2039,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         String[] repeatNames = {"끄기", "한 개 반복", "전체 반복"};
         boolean bgOn = Prefs.bool(this, Prefs.BG_PLAY, false) || engine.backgroundOverride;
         m.add(0, 1, 0, "재생 속도  (" + Util.speed(engine.speed) + ")");
+        m.add(0, 12, 0, "오디오 싱크  (" + AudioSync.get(this).summary() + ")");
         m.add(0, 2, 0, "화면 비율  (" + VideoFrameLayout.MODE_NAMES[videoFrame.getMode()] + ")");
         m.add(0, 3, 0, engine.abA < 0 ? "A-B 구간 반복: A 지점 설정" : engine.abB < 0 ? "A-B 구간 반복: B 지점 설정" : "A-B 구간 반복 해제");
         m.add(0, 4, 0, "반복 재생  (" + repeatNames[engine.repeatMode] + ")");
@@ -2064,6 +2077,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
                 case 9: switchDecoder(!engine.isSw(), true); break;
                 case 10: showInfoDialog(); break;
                 case 11: startActivity(new Intent(this, SettingsActivity.class).addFlags(Intent.FLAG_ACTIVITY_NO_USER_ACTION)); break;
+                case 12: showAudioSyncDialog(); break;
                 default: return false;
             }
             return true;

@@ -10,4 +10,6 @@
     <color name="text2">#FF9AA3AF</color>
     <color name="divider">#FF2A2E36</color>
     <color name="new_badge">#FFFF4D5E</color>
+    <color name="selected">#3D2F86FF</color>
+    <color name="selected_thumb">#992F86FF</color>
 </resources>

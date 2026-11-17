@@ -75,6 +75,13 @@ public class SettingsActivity extends Activity {
                     return true;
                 });
             }
+            Preference sync = findPreference("audio_sync");
+            if (sync != null) {
+                sync.setOnPreferenceClickListener(p -> {
+                    AudioSync.dialog(getActivity(), this::updateSyncSummary).show();
+                    return true;
+                });
+            }
             Preference about = findPreference("about");
             if (about != null) {
                 String v = "1.0";
@@ -86,9 +93,19 @@ public class SettingsActivity extends Activity {
             }
         }
 
+        /** "지금 출력: Galaxy Buds2 Pro (블루투스) · +0.15초" */
+        private void updateSyncSummary() {
+            Preference sync = findPreference("audio_sync");
+            if (sync == null || getActivity() == null) return;
+            AudioSync s = AudioSync.get(getActivity());
+            sync.setSummary("지금 출력: " + s.label() + " · " + AudioSync.format(s.delayMs())
+                    + "\n출력 기기마다 따로 기억합니다. 소리가 늦게 들리면 + 로 맞추세요");
+        }
+
         @Override
         public void onResume() {
             super.onResume();
+            updateSyncSummary();
             Preference check = findPreference("check_update");
             if (check != null) {
                 String ready = UpdateInstaller.readyVersion(getActivity());

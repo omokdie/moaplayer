@@ -13,6 +13,8 @@
             android:summary="홈 버튼을 누르거나 화면을 꺼도 소리 계속 재생" android:defaultValue="false"/>
         <SwitchPreference android:key="auto_pip" android:title="홈 버튼 누르면 팝업(PiP) 재생"
             android:summary="재생 중 홈으로 나가면 작은 창으로 계속 재생" android:defaultValue="false"/>
+        <Preference android:key="audio_sync" android:title="오디오 싱크 (블루투스 지연 보정)"
+            android:summary="소리가 영상보다 늦게 들릴 때 맞춥니다"/>
     </PreferenceCategory>
     <PreferenceCategory android:title="제스처">
         <SwitchPreference android:key="gesture_brightness" android:title="밝기 조절" android:summary="화면 왼쪽을 위/아래로 스와이프" android:defaultValue="true"/>

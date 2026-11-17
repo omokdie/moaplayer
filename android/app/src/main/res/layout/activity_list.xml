@@ -3,10 +3,32 @@
     android:layout_width="match_parent" android:layout_height="match_parent"
     android:orientation="vertical" android:background="@color/bg">
 
-    <Toolbar android:id="@+id/toolbar"
-        android:layout_width="match_parent" android:layout_height="?android:attr/actionBarSize"
-        android:background="@color/toolbar" android:elevation="4dp"
-        android:titleTextColor="@color/text" android:subtitleTextColor="@color/text2"/>
+    <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+        <Toolbar android:id="@+id/toolbar"
+            android:layout_width="match_parent" android:layout_height="?android:attr/actionBarSize"
+            android:background="@color/toolbar" android:elevation="4dp"
+            android:titleTextColor="@color/text" android:subtitleTextColor="@color/text2"/>
+
+        <!-- multi-select header (MX Player style): over the toolbar, which keeps its search box -->
+        <LinearLayout android:id="@+id/sel_header"
+            android:layout_width="match_parent" android:layout_height="?android:attr/actionBarSize"
+            android:orientation="horizontal" android:gravity="center_vertical"
+            android:background="@color/surface2" android:elevation="4dp" android:paddingRight="4dp"
+            android:clickable="true" android:focusable="true" android:visibility="gone">
+            <ImageButton android:id="@+id/sel_close" style="@style/BarButton" android:layout_marginLeft="4dp"
+                android:src="@drawable/ic_close" android:contentDescription="선택 끝내기"/>
+            <TextView android:id="@+id/sel_title"
+                android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                android:layout_marginLeft="12dp" android:textColor="@color/text" android:textSize="19sp"
+                android:singleLine="true" android:ellipsize="end"/>
+            <ImageButton android:id="@+id/sel_play" style="@style/BarButton"
+                android:src="@drawable/ic_play" android:contentDescription="선택한 동영상 재생"/>
+            <ImageButton android:id="@+id/sel_info" style="@style/BarButton"
+                android:src="@drawable/ic_info" android:contentDescription="정보"/>
+            <ImageButton android:id="@+id/sel_more" style="@style/BarButton"
+                android:src="@drawable/ic_more" android:contentDescription="더보기"/>
+        </LinearLayout>
+    </FrameLayout>
 
     <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1">
 
@@ -43,4 +65,35 @@
             android:background="@drawable/bg_fab" android:src="@drawable/ic_play"
             android:elevation="6dp" android:contentDescription="@string/resume_last" android:visibility="gone"/>
     </FrameLayout>
+
+    <!-- multi-select actions -->
+    <LinearLayout android:id="@+id/sel_bar"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal" android:background="@color/toolbar" android:elevation="8dp"
+        android:paddingTop="4dp" android:paddingBottom="4dp" android:visibility="gone">
+        <LinearLayout android:id="@+id/sel_all" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_select_all"/>
+            <TextView style="@style/SelLabel" android:text="전체 선택"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/sel_move" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_move"/>
+            <TextView style="@style/SelLabel" android:text="이동"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/sel_copy" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_copy"/>
+            <TextView style="@style/SelLabel" android:text="복사"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/sel_mark" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_label"/>
+            <TextView style="@style/SelLabel" android:text="표시"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/sel_rename" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_edit"/>
+            <TextView style="@style/SelLabel" android:text="이름 변경"/>
+        </LinearLayout>
+        <LinearLayout android:id="@+id/sel_delete" style="@style/SelAction">
+            <ImageView style="@style/SelIcon" android:src="@drawable/ic_delete"/>
+            <TextView style="@style/SelLabel" android:text="삭제"/>
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

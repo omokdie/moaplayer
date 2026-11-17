@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** Adapter showing videos either as a list (thumbnail on the left) or as a grid. */
 public class VideoAdapter extends BaseAdapter {
@@ -23,10 +24,17 @@ public class VideoAdapter extends BaseAdapter {
     private boolean grid;
     private boolean thumbs = true;
     private boolean showFolder;
+    /** Keys of the selected videos while selecting (null otherwise). */
+    private Set<String> selection;
+    /** The last played video of the list: its name is highlighted. */
+    private String lastKey;
+    private final int textColor, accentColor;
 
     public VideoAdapter(Context c) {
         ctx = c;
         inf = LayoutInflater.from(c);
+        textColor = c.getColor(R.color.text);
+        accentColor = c.getColor(R.color.accent);
     }
 
     public void setItems(List<VideoItem> list) {
@@ -56,6 +64,21 @@ public class VideoAdapter extends BaseAdapter {
         showFolder = s;
     }
 
+    public void setSelection(Set<String> keys) {
+        selection = keys;
+        notifyDataSetChanged();
+    }
+
+    public void setLastKey(String key) {
+        boolean same = key == null ? lastKey == null : key.equals(lastKey);
+        lastKey = key;
+        if (!same) notifyDataSetChanged();
+    }
+
+    public String getLastKey() {
+        return lastKey;
+    }
+
     @Override public int getCount() { return items.size(); }
     @Override public VideoItem getItem(int i) { return items.get(i); }
     @Override public long getItemId(int i) { return items.get(i).id; }
@@ -67,6 +90,7 @@ public class VideoAdapter extends BaseAdapter {
         ImageView thumb;
         TextView title, info, duration, badge;
         ProgressBar watched;
+        View sel;
     }
 
     @Override
@@ -82,10 +106,16 @@ public class VideoAdapter extends BaseAdapter {
             h.duration = convertView.findViewById(R.id.duration);
             h.badge = convertView.findViewById(R.id.badge);
             h.watched = convertView.findViewById(R.id.watched);
+            h.sel = convertView.findViewById(R.id.sel);
             convertView.setTag(R.id.tag_holder, h);
         }
         VideoItem v = items.get(pos);
+        String key = v.key();
+        boolean picked = selection != null && selection.contains(key);
+        convertView.setActivated(picked);
+        h.sel.setVisibility(picked ? View.VISIBLE : View.GONE);
         h.title.setText(v.title());
+        h.title.setTextColor(key.equals(lastKey) ? accentColor : textColor);
         StringBuilder info = new StringBuilder();
         if (showFolder && v.folderName != null) info.append(v.folderName).append(" · ");
         String sz = Util.size(v.size);
@@ -97,9 +127,12 @@ public class VideoAdapter extends BaseAdapter {
         h.info.setText(info.toString());
         h.duration.setText(v.duration > 0 ? Util.time(v.duration) : "");
         h.duration.setVisibility(v.duration > 0 ? View.VISIBLE : View.GONE);
-        HistoryDb.Entry e = history.get(v.key());
+        HistoryDb.Entry e = history.get(key);
         h.badge.setVisibility(e == null ? View.VISIBLE : View.GONE);
-        if (e != null && !e.finished() && e.position > 3000) {
+        if (e != null && e.finished()) {
+            h.watched.setProgress(1000);   // watched to the end
+            h.watched.setVisibility(View.VISIBLE);
+        } else if (e != null && e.position > 3000) {
             long dur = e.duration > 0 ? e.duration : v.duration;
             int prog = dur > 0 ? (int) Math.min(1000, e.position * 1000 / dur) : 0;
             h.watched.setProgress(prog);

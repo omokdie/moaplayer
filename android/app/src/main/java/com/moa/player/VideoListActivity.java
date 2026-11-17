@@ -38,10 +38,12 @@ public class VideoListActivity extends BaseLibraryActivity {
         toolbar.setNavigationIcon(R.drawable.ic_back);
         toolbar.setNavigationOnClickListener(v -> finish());
         grid.setAdapter(videoAdapter);
-        grid.setOnItemClickListener((parent, view, pos, id) ->
-                PlayerActivity.play(this, videoAdapter.getItems(), pos, false));
+        grid.setOnItemClickListener((parent, view, pos, id) -> {
+            if (!onVideoTapWhileSelecting(pos)) PlayerActivity.play(this, videoAdapter.getItems(), pos, false);
+        });
+        // long press selects (MX Player style): several files can then be moved, marked, deleted…
         grid.setOnItemLongClickListener((parent, view, pos, id) -> {
-            showVideoActions(videoAdapter.getItem(pos), videoAdapter.getItems(), pos);
+            onVideoLongPress(pos);
             return true;
         });
         fab.setOnClickListener(v -> playLastInFolder());
@@ -92,10 +94,23 @@ public class VideoListActivity extends BaseLibraryActivity {
         MediaRepo.sortVideos(shown, sortBy(), sortDesc());
         videoAdapter.setGrid(showingVideoGrid());
         videoAdapter.setItems(shown);
+        VideoItem last = lastInFolder();
+        videoAdapter.setLastKey(last != null ? last.key() : null);
+        syncSelection();
         applyColumns();
         toolbar.setSubtitle("동영상 " + videos.size() + "개");
         if (shown.isEmpty()) showEmpty(query.isEmpty() ? getString(R.string.no_videos) : "검색 결과가 없습니다", false);
         else hideEmpty();
+        updateFab();
+    }
+
+    @Override
+    protected void onHistoryChanged() {
+        rebuild();
+    }
+
+    @Override
+    protected void onSelectionModeChanged(boolean on) {
         updateFab();
     }
 
@@ -113,7 +128,7 @@ public class VideoListActivity extends BaseLibraryActivity {
     }
 
     private void updateFab() {
-        fab.setVisibility(lastInFolder() != null ? View.VISIBLE : View.GONE);
+        fab.setVisibility(lastInFolder() != null && !selecting() ? View.VISIBLE : View.GONE);
     }
 
     private void playLastInFolder() {

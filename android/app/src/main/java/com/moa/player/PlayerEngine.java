@@ -18,6 +18,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.SeekParameters;
 import androidx.media3.exoplayer.analytics.AnalyticsListener;
+import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.mediacodec.MediaCodecInfo;
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector;
 import androidx.media3.exoplayer.mediacodec.MediaCodecUtil;
@@ -97,6 +98,8 @@ public final class PlayerEngine {
 
     private PlayerEngine(Context c) {
         app = c;
+        // follows the audio output (Bluetooth on/off) and applies its sync delay to every player
+        AudioSync.get(c);
     }
 
     public ExoPlayer player() {
@@ -442,7 +445,16 @@ public final class PlayerEngine {
         // EXTENSION_RENDERER_MODE_ON: the FFmpeg audio decoder (androidx.media3.decoder.ffmpeg, built in)
         // takes the formats Android cannot decode on this phone — E-AC3/AC3, DTS, TrueHD, ALAC.
         // Android's own decoders still come first for everything they can play.
-        DefaultRenderersFactory rf = new DefaultRenderersFactory(app)
+        // The audio sink is wrapped: AudioDelaySink shifts the clock that pictures and subtitles follow,
+        // by the delay set for the current output (e.g. Bluetooth earphones whose sound comes late).
+        DefaultRenderersFactory rf = new DefaultRenderersFactory(app) {
+            @Override
+            protected AudioSink buildAudioSink(Context context, boolean enableFloatOutput,
+                                               boolean enableAudioOutputPlaybackParams) {
+                AudioSink sink = super.buildAudioSink(context, enableFloatOutput, enableAudioOutputPlaybackParams);
+                return sink != null ? new AudioDelaySink(sink) : null;
+            }
+        }
                 .setEnableDecoderFallback(true)
                 .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
                 .setMediaCodecSelector(swMode ? SOFTWARE_FIRST : MediaCodecSelector.DEFAULT);

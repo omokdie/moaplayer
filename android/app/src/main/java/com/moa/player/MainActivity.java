@@ -43,13 +43,13 @@ public class MainActivity extends BaseLibraryActivity {
         grid.setAdapter(folderAdapter);
         grid.setOnItemClickListener((parent, view, pos, id) -> {
             if (searchMode) {
-                PlayerActivity.play(this, videoAdapter.getItems(), pos, false);
+                if (!onVideoTapWhileSelecting(pos)) PlayerActivity.play(this, videoAdapter.getItems(), pos, false);
             } else {
                 openFolder(folderAdapter.getItem(pos));
             }
         });
         grid.setOnItemLongClickListener((parent, view, pos, id) -> {
-            if (searchMode) showVideoActions(videoAdapter.getItem(pos), videoAdapter.getItems(), pos);
+            if (searchMode) onVideoLongPress(pos);   // search results: select like in a folder
             else showFolderActions(folderAdapter.getItem(pos));
             return true;
         });
@@ -69,8 +69,14 @@ public class MainActivity extends BaseLibraryActivity {
     protected void onResume() {
         super.onResume();
         if (hasMediaPermission()) {
-            if (System.currentTimeMillis() - lastLoad > 4000) reload();
-            else refreshHistoryAndFolders();
+            if (System.currentTimeMillis() - lastLoad > 4000) {
+                reload();
+            } else {
+                // a folder screen may have just reloaded after moving or deleting files: use its newer list
+                List<VideoItem> newer = MediaRepo.cached();
+                if (newer != null && !loading) all = newer;
+                refreshHistoryAndFolders();
+            }
         }
         updateFab();
         // "업데이트했습니다" after an update, or offer a downloaded one
@@ -184,6 +190,8 @@ public class MainActivity extends BaseLibraryActivity {
             MediaRepo.sortVideos(res, sortBy(), sortDesc());
             videoAdapter.setGrid(showingVideoGrid());
             videoAdapter.setItems(res);
+            videoAdapter.setLastKey(lastPlayedKey());
+            syncSelection();
         }
         applyColumns();
         if (all.isEmpty()) showEmpty(getString(R.string.no_videos), false);
@@ -192,18 +200,44 @@ public class MainActivity extends BaseLibraryActivity {
         toolbar.setSubtitle(searchMode ? null : (all.isEmpty() ? null : "폴더 " + folders.size() + "개 · 동영상 " + all.size() + "개"));
     }
 
+    /** The most recently played video (its name is highlighted in search results). */
+    private String lastPlayedKey() {
+        String key = null;
+        long t = 0;
+        for (HistoryDb.Entry e : history.values()) {
+            if (e.lastPlayed > t) {
+                t = e.lastPlayed;
+                key = e.key;
+            }
+        }
+        return key;
+    }
+
+    @Override
+    protected void onHistoryChanged() {
+        rebuild();
+        updateFab();
+    }
+
+    @Override
+    protected void onSelectionModeChanged(boolean on) {
+        updateFab();
+    }
+
     private void setSearchMode(boolean on) {
         if (searchMode == on) return;
+        if (!on) exitSelection();
         searchMode = on;
         grid.setAdapter(on ? videoAdapter : folderAdapter);
         // Do not invalidate the options menu here: that would collapse the open search box.
         updateViewItem();
         rebuild();
+        updateFab();
     }
 
     private void updateFab() {
         HistoryDb.Entry e = HistoryDb.get(this).lastPlayed();
-        fab.setVisibility(e != null && e.uri != null && !searchMode ? View.VISIBLE : View.GONE);
+        fab.setVisibility(e != null && e.uri != null && !searchMode && !selecting() ? View.VISIBLE : View.GONE);
     }
 
     private void resumeLast() {
