@@ -25,13 +25,21 @@ public final class HistoryDb extends SQLiteOpenHelper {
         public long position, duration, lastPlayed, subDelay;
 
         public boolean finished() {
-            return duration > 0 && position >= duration - Math.max(3000, duration / 50);
+            return duration > 0 && position > 0 && position >= duration - Math.max(3000, duration / 50);
         }
 
         public float progress() {
             if (duration <= 0) return 0f;
             return Math.min(1f, position / (float) duration);
         }
+    }
+
+    /**
+     * Shown with the NEW badge: never played, or marked "새 파일". A marked file keeps its row (with
+     * last_played = -1) when it has a subtitle delay worth keeping; otherwise the row is removed.
+     */
+    public static boolean isNew(Entry e) {
+        return e == null || e.lastPlayed < 0;
     }
 
     private HistoryDb(Context c) {
@@ -196,11 +204,19 @@ public final class HistoryDb extends SQLiteOpenHelper {
         if (key == null) return;
         try {
             SQLiteDatabase db = getWritableDatabase();
+            Entry e = get(key);
             if (kind == MARK_NEW) {
-                db.delete("history", "key=?", new String[]{key});
+                if (e != null && e.subDelay != 0) {
+                    // keep the subtitle delay that was set for this file: only the playback state goes
+                    ContentValues v = new ContentValues();
+                    v.put("position", 0);
+                    v.put("last_played", -1);
+                    db.update("history", v, "key=?", new String[]{key});
+                } else {
+                    db.delete("history", "key=?", new String[]{key});
+                }
                 return;
             }
-            Entry e = get(key);
             long dur = e != null && e.duration > 0 ? e.duration : Math.max(0, durationHint);
             ContentValues v = new ContentValues();
             if (uri != null) v.put("uri", uri);
@@ -215,6 +231,7 @@ public final class HistoryDb extends SQLiteOpenHelper {
                     v.put("duration", dur);
                 }
                 v.put("position", dur);
+                if (e != null && e.lastPlayed < 0) v.put("last_played", 0);   // no longer "새 파일"
             } else {
                 v.put("position", 0);
                 v.put("last_played", 0);

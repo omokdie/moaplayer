@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.database.Cursor;
 import android.media.MediaScannerConnection;
 import android.net.Uri;
 import android.os.Build;
@@ -399,7 +400,7 @@ public abstract class BaseLibraryActivity extends Activity {
     /** Which of {@link #MARKS} a video shows now (-1: partly watched, none of them). */
     private int currentMark(VideoItem v) {
         HistoryDb.Entry e = history.get(v.key());
-        if (e == null) return HistoryDb.MARK_NEW;
+        if (HistoryDb.isNew(e)) return HistoryDb.MARK_NEW;
         if (v.key().equals(videoAdapter.getLastKey())) return HistoryDb.MARK_LAST;
         if (e.finished()) return HistoryDb.MARK_DONE;
         if (e.position <= 3000) return HistoryDb.MARK_NONE;
@@ -542,12 +543,6 @@ public abstract class BaseLibraryActivity extends Activity {
         final Context app = getApplicationContext();
         new Thread(() -> {
             final FileOps.Result r = FileOps.transfer(items, dest, copy, td, app.getContentResolver());
-            HistoryDb db = HistoryDb.get(app);
-            for (String[] m : r.moved) {
-                // the resume point and NEW state go along with the file
-                File nf = new File(m[1]);
-                db.renameKey(m[0], m[1], Uri.fromFile(nf).toString(), Util.stripExt(nf.getName()), nf.getParent());
-            }
             rescan(r.scan);
             runOnUiThread(() -> {
                 td.dismiss();
@@ -619,6 +614,14 @@ public abstract class BaseLibraryActivity extends Activity {
         @Override
         public boolean cancelled() {
             return cancel;
+        }
+
+        /** The resume point and marks go along with each moved file, right away. */
+        @Override
+        public void moved(String from, String to) {
+            File nf = new File(to);
+            HistoryDb.get(getApplicationContext()).renameKey(from, to, Uri.fromFile(nf).toString(),
+                    Util.stripExt(nf.getName()), nf.getParent());
         }
 
         void dismiss() {
@@ -981,6 +984,7 @@ public abstract class BaseLibraryActivity extends Activity {
             }
         }
         if (Build.VERSION.SDK_INT >= 30) {
+            // no direct file access: MediaStore renames the file once the user allows it
             pendingRename = v;
             pendingRenameName = newName;
             try {
@@ -991,21 +995,30 @@ public abstract class BaseLibraryActivity extends Activity {
             }
             return;
         }
-        if (updateDisplayName(v, newName)) {
-            renamedByMediaStore(v, newName);
-            Util.toast(this, "이름을 변경했습니다");
-            reload();
-        } else {
-            Util.toast(this, "이름을 변경할 수 없습니다");
-        }
+        // Android 10 and older: MediaStore would only change the name in its list, not the file
+        Util.toast(this, "이름을 변경할 수 없습니다");
     }
 
-    /** MediaStore renamed the file (same id, same content URI): move its history entry along. */
-    private void renamedByMediaStore(VideoItem v, String newName) {
-        if (v.path == null) return;
-        File nf = new File(new File(v.path).getParentFile(), newName);
-        HistoryDb.get(this).renameKey(v.key(), nf.getAbsolutePath(), v.uri != null ? v.uri.toString() : null,
-                Util.stripExt(newName), nf.getParent());
+    /** Where MediaStore says a file is now (null if unknown). */
+    private String mediaStorePath(Uri uri) {
+        if (uri == null) return null;
+        try (Cursor c = getContentResolver().query(uri, new String[]{MediaStore.MediaColumns.DATA}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * After MediaStore renamed a file: moves its history entry to where the file really is now
+     * (MediaStore picks "B (1).mp4" when "B.mp4" exists). False if the file did not move.
+     */
+    private boolean renamedByMediaStore(VideoItem v) {
+        String real = mediaStorePath(v.uri);
+        if (real == null || real.equals(v.path) || !new File(real).exists()) return false;
+        File nf = new File(real);
+        HistoryDb.get(this).renameKey(v.key(), real, v.uri.toString(), Util.stripExt(nf.getName()), nf.getParent());
+        return true;
     }
 
     private boolean updateDisplayName(VideoItem v, String newName) {
@@ -1043,13 +1056,12 @@ public abstract class BaseLibraryActivity extends Activity {
             String n = pendingRenameName;
             pendingRename = null;
             if (v != null && resultCode == RESULT_OK && n != null) {
-                if (updateDisplayName(v, n)) {
-                    renamedByMediaStore(v, n);
+                if (updateDisplayName(v, n) && renamedByMediaStore(v)) {
                     Util.toast(this, "이름을 변경했습니다");
-                    refreshAfterFolderChange();
                 } else {
                     Util.toast(this, "이름을 변경할 수 없습니다");
                 }
+                refreshAfterFolderChange();
             }
         }
     }

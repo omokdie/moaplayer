@@ -3,13 +3,17 @@ package com.moa.player;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
+import android.media.AudioAttributes;
 import android.media.AudioDeviceCallback;
 import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
+import android.media.AudioPlaybackConfiguration;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -67,8 +71,24 @@ public final class AudioSync {
                     refresh();
                 }
             }, main);
+            // output switched while the same devices stay connected (Android's media output picker)
+            if (Build.VERSION.SDK_INT >= 33) watchPlayback();
         }
     }
+
+    private void watchPlayback() {
+        am.registerAudioPlaybackCallback(new AudioManager.AudioPlaybackCallback() {
+            @Override
+            public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs) {
+                refresh();
+            }
+        }, main);
+    }
+
+    private static final AudioAttributes MEDIA = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+            .build();
 
     /** 0: not a media output. When outputs appeared together, the higher one plays. */
     private static int rank(int type) {
@@ -100,13 +120,27 @@ public final class AudioSync {
         }
     }
 
-    private void refresh() {
+    /** Looks at where media sound goes now (also called when playback starts). Main thread. */
+    public void refresh() {
         AudioDeviceInfo best = null;
         int bestRank = 0;
         long bestAt = -1;
+        if (am != null && Build.VERSION.SDK_INT >= 33) {
+            // Android 13+ says which device media really plays on (also after a switch in its output picker)
+            try {
+                for (AudioDeviceInfo d : am.getAudioDevicesForAttributes(MEDIA)) {
+                    int r = rank(d.getType());
+                    if (r > bestRank) {
+                        best = d;
+                        bestRank = r;
+                    }
+                }
+            } catch (RuntimeException ignored) {
+            }
+        }
         AudioDeviceInfo[] devices = null;
         try {
-            if (am != null) devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+            if (best == null && am != null) devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
         } catch (RuntimeException ignored) {
         }
         if (devices != null) {
@@ -268,9 +302,20 @@ public final class AudioSync {
             refresh.run();
             if (onChange != null) onChange.run();
         }));
-        s.addListener(refresh);   // Bluetooth connected or gone while the dialog is open
+        s.refresh();
+        // Bluetooth connected or gone while the dialog is open. Removed when the dialog's views go
+        // away: also when the screen closes without dismissing it (no leaked activity in the singleton).
+        box.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View v) {
+                s.addListener(refresh);
+                refresh.run();
+            }
+
+            @Override public void onViewDetachedFromWindow(View v) {
+                s.removeListener(refresh);
+            }
+        });
         d.setOnDismissListener(x -> {
-            s.removeListener(refresh);
             if (onChange != null) onChange.run();
         });
         return d;

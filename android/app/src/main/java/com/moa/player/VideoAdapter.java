@@ -128,7 +128,7 @@ public class VideoAdapter extends BaseAdapter {
         h.duration.setText(v.duration > 0 ? Util.time(v.duration) : "");
         h.duration.setVisibility(v.duration > 0 ? View.VISIBLE : View.GONE);
         HistoryDb.Entry e = history.get(key);
-        h.badge.setVisibility(e == null ? View.VISIBLE : View.GONE);
+        h.badge.setVisibility(HistoryDb.isNew(e) ? View.VISIBLE : View.GONE);
         if (e != null && e.finished()) {
             h.watched.setProgress(1000);   // watched to the end
             h.watched.setVisibility(View.VISIBLE);

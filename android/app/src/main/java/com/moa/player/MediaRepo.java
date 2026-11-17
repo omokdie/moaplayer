@@ -115,7 +115,7 @@ public final class MediaRepo {
             f.videos.add(v);
             f.totalSize += v.size;
             f.lastModified = Math.max(f.lastModified, Math.max(v.dateModified, v.dateAdded));
-            if (history != null && !history.containsKey(v.key())) f.newCount++;
+            if (history != null && HistoryDb.isNew(history.get(v.key()))) f.newCount++;
         }
         return new ArrayList<>(map.values());
     }

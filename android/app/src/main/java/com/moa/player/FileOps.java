@@ -19,12 +19,39 @@ import java.util.Set;
 final class FileOps {
     private FileOps() {}
 
-    private static final Set<String> VIDEO_EXT = new HashSet<>(Arrays.asList(
-            "mp4", "m4v", "mkv", "webm", "avi", "mov", "wmv", "asf", "flv", "f4v", "ts", "m2ts", "mts", "tp",
-            "trp", "mpg", "mpeg", "m2v", "vob", "3gp", "3g2", "ogv", "divx", "rm", "rmvb"));
+    /** Files that are surely not videos (posters, info files…): they never own subtitles. */
+    private static final Set<String> NOT_VIDEO_EXT = new HashSet<>(Arrays.asList(
+            "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tif", "tiff", "nfo", "txt", "xml",
+            "json", "md5", "sha1", "sfv", "par2", "torrent", "url", "lnk", "ini", "db", "log", "htm", "html",
+            "pdf", "zip", "rar", "7z", "nomedia"));
 
-    static boolean isVideoName(String name) {
-        return VIDEO_EXT.contains(Util.ext(name));
+    /**
+     * Whether another file next to a video may be a video that shares its subtitles. Anything that is
+     * not clearly something else counts (".3gpp", ".qt", ".m2t"…): wrongly keeping a subtitle file is
+     * harmless, wrongly deleting or moving another video's subtitles is not.
+     */
+    static boolean mayBeVideo(String name) {
+        return !SubtitleParser.isSubtitleFile(name) && !NOT_VIDEO_EXT.contains(Util.ext(name))
+                && !name.endsWith(PART);
+    }
+
+    /** Hidden name a copy is written under until it is complete: a killed copy never looks like the file. */
+    private static final String PART = ".moa-part";
+
+    private static File partFile(File dst) {
+        return new File(dst.getParentFile(), "." + dst.getName() + PART);
+    }
+
+    /** Removes copies left half done (app killed during a copy) more than 10 minutes ago. */
+    static void cleanParts(File dir) {
+        File[] all = dir != null ? dir.listFiles() : null;
+        if (all == null) return;
+        long old = System.currentTimeMillis() - 10 * 60_000L;
+        for (File f : all) {
+            String n = f.getName();
+            if (f.isFile() && n.startsWith(".") && n.endsWith(PART) && f.lastModified() < old) //noinspection ResultOfMethodCallIgnored
+                f.delete();
+        }
     }
 
     // ------------------------------------------------------------------ subtitle files of a video
@@ -55,7 +82,7 @@ final class FileOps {
         List<String> others = new ArrayList<>();
         for (File f : all) {
             String n = f.getName();
-            if (n.equals(name) || !isVideoName(n) || !f.isFile()) continue;
+            if (n.equals(name) || !mayBeVideo(n) || !f.isFile()) continue;
             String b = base(n);
             if (b.equals(vb)) s.shared = true;
             else if (b.length() > vb.length()) others.add(b);
@@ -89,7 +116,7 @@ final class FileOps {
         for (File s : subs.files) {
             File t = sidecarTarget(s, oldVideo, newVideo, s.getParentFile());
             if (t.exists()) continue;
-            if (subs.shared) copyPlain(s, t);
+            if (subs.shared) copyPlain(s, t, false);
             else //noinspection ResultOfMethodCallIgnored
                 s.renameTo(t);
         }
@@ -181,6 +208,9 @@ final class FileOps {
         void update(int i, int n, long done, long total, String name);
 
         boolean cancelled();
+
+        /** A video was moved: its history should follow at once (a batch may be cut short). */
+        void moved(String from, String to);
     }
 
     static final class Result {
@@ -211,6 +241,7 @@ final class FileOps {
         long done = 0;
         String destPath = dest.getAbsolutePath();
         String destVol = volumeOf(destPath);
+        cleanParts(dest);
         for (int i = 0; i < n; i++) {
             if (p.cancelled()) {
                 r.cancelled = true;
@@ -235,7 +266,7 @@ final class FileOps {
             boolean ok = false, original = false;
             if (!copy && src.renameTo(dst)) {
                 ok = true;
-            } else if (copyFile(src, dst, i, n, done, total, p, !copy)) {
+            } else if (copyFile(src, dst, i, n, done, total, p)) {
                 ok = true;
                 if (!copy && !deleteVideo(src, v.uri, cr)) original = true;
             }
@@ -253,6 +284,7 @@ final class FileOps {
             if (!copy && !original) {
                 r.scan.add(src.getAbsolutePath());
                 r.moved.add(new String[]{src.getAbsolutePath(), dst.getAbsolutePath()});
+                p.moved(src.getAbsolutePath(), dst.getAbsolutePath());
             }
             if (original) r.keptOriginal++;
             // subtitles go along, renamed like the video when it needed a free name
@@ -261,21 +293,26 @@ final class FileOps {
                 File t = sidecarTarget(s, src, dst, dest);
                 if (t.exists()) continue;
                 if (moveSubs) {
-                    if (!s.renameTo(t) && copyPlain(s, t)) //noinspection ResultOfMethodCallIgnored
+                    if (!s.renameTo(t) && copyPlain(s, t, true)) //noinspection ResultOfMethodCallIgnored
                         s.delete();
                 } else {
-                    copyPlain(s, t);
+                    copyPlain(s, t, false);
                 }
             }
         }
         return r;
     }
 
-    private static boolean copyFile(File src, File dst, int i, int n, long done, long total, Progress p, boolean sync) {
+    /**
+     * Copies under a hidden temporary name and renames it to {@code dst} only when it is complete and
+     * on the storage (fsync): if the app is killed meanwhile, no half file shows up as a video.
+     */
+    private static boolean copyFile(File src, File dst, int i, int n, long done, long total, Progress p) {
+        File part = partFile(dst);
         byte[] buf = new byte[1 << 20];
         long pos = 0;
         boolean ok = false;
-        try (InputStream in = new FileInputStream(src); FileOutputStream out = new FileOutputStream(dst)) {
+        try (InputStream in = new FileInputStream(src); FileOutputStream out = new FileOutputStream(part)) {
             int r;
             while ((r = in.read(buf)) > 0) {
                 if (p.cancelled()) return false;
@@ -283,27 +320,34 @@ final class FileOps {
                 pos += r;
                 p.update(i, n, done + pos, total, src.getName());
             }
-            // a move deletes the original next: make sure the copy is really on the card first
-            if (sync) out.getFD().sync();
+            // a move deletes the original next: the copy must really be on the storage first
+            out.getFD().sync();
             ok = true;
         } catch (IOException | RuntimeException e) {
             ok = false;
         } finally {
             if (!ok) //noinspection ResultOfMethodCallIgnored
-                dst.delete();
+                part.delete();
         }
         if (!ok) return false;
+        if (dst.exists() || !part.renameTo(dst)) {
+            //noinspection ResultOfMethodCallIgnored
+            part.delete();
+            return false;
+        }
         //noinspection ResultOfMethodCallIgnored
         dst.setLastModified(src.lastModified());
         return true;
     }
 
-    static boolean copyPlain(File src, File dst) {
+    /** Small files (subtitles). {@code sync}: the original is deleted next. */
+    static boolean copyPlain(File src, File dst, boolean sync) {
         boolean ok = false;
         try (InputStream in = new FileInputStream(src); FileOutputStream out = new FileOutputStream(dst)) {
             byte[] buf = new byte[64 * 1024];
             int r;
             while ((r = in.read(buf)) > 0) out.write(buf, 0, r);
+            if (sync) out.getFD().sync();
             ok = true;
         } catch (IOException | RuntimeException e) {
             ok = false;

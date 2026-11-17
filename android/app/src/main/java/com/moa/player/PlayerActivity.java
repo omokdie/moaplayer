@@ -769,6 +769,7 @@ public class PlayerActivity extends Activity implements GestureView.Callback {
         showControls();
         loadSubtitlesAsync(r);
         // first time with a Bluetooth device: say where the sync is (once per device)
+        AudioSync.get(this).refresh();
         if (AudioSync.get(this).takeBluetoothTip()) {
             ui.postDelayed(() -> {
                 if (!isFinishing()) Util.toast(this, "블루투스 소리가 영상보다 늦으면 ⋮ → 오디오 싱크에서 맞출 수 있습니다");
